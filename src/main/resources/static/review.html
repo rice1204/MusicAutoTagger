@@ -9,127 +9,300 @@
     <script src="i18n.js?v=1"></script>
     <script src="shell.js?v=1"></script>
     <style>
-        .layout {
+        /* ============================================================
+           待确认 —— 「建议 → 选择并核对 → 决定」三段式
+           左：队列（只负责挑下一件事）；右：一件事的完整决策面板，
+           底部决策条固定在视口内，任何时候都看得到「我现在要做什么」。
+           ============================================================ */
+        .desk {
             display: grid;
-            grid-template-columns: 340px minmax(0, 1fr);
+            grid-template-columns: 320px minmax(0, 1fr);
             gap: 18px;
             align-items: start;
         }
-        @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
 
-        .queue-list { max-height: calc(100vh - 250px); overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
-
-        .item {
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 12px 14px;
-            cursor: pointer;
-            transition: background .15s ease, border-color .15s ease;
-            background: #fff;
+        /* ---------- 队列 ---------- */
+        .queue {
+            position: sticky;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 40px);
+            padding: 0;
+            overflow: hidden;
         }
-        .item:hover { background: var(--bg-soft); }
-        .item.active { border-color: var(--primary-line); background: var(--primary-soft); box-shadow: 0 0 0 1px var(--primary-line); }
-        .item .name { font-weight: 600; word-break: break-all; font-size: 13.5px; }
-        .item .meta { font-size: 12px; color: var(--text-mute); margin-top: 5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        .item-signals { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
-        .signal { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 7px; font-size: 11px; font-weight: 600; background: var(--bg-soft); color: var(--text-soft); border: 1px solid var(--border); }
+        .queue-top { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+        .kind-tabs { display: flex; gap: 2px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+        .kind-tab {
+            flex: 1 1 0; min-width: 0;
+            background: none; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer;
+            font: inherit; font-size: 13px; font-weight: 600; color: var(--text-soft);
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+        }
+        .kind-tab:hover { color: var(--text); }
+        .kind-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+        .kind-tab .tab-label { overflow: hidden; text-overflow: ellipsis; }
+        .tab-count {
+            min-width: 18px; padding: 0 6px; border-radius: 9px; background: var(--warn-soft); color: var(--warn);
+            font-weight: 700; font-size: 11px; line-height: 18px; text-align: center; display: none; font-variant-numeric: tabular-nums;
+        }
+        .tab-count.show { display: inline-block; }
+        .queue-filter { display: flex; align-items: center; gap: 8px; }
+        .queue-filter select {
+            flex: 1; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+            padding: 5px 9px; min-height: 32px; font: inherit; font-size: 13px; color: var(--text); background: #fff;
+        }
+        .queue-filter select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+
+        .queue-list { overflow-y: auto; padding: 8px; display: grid; gap: 4px; align-content: start; flex: 1 1 auto; min-height: 120px; }
+        .q-item {
+            display: grid; gap: 3px; width: 100%; text-align: left; font: inherit; color: var(--text);
+            background: transparent; border: 1px solid transparent; border-radius: var(--radius);
+            padding: 10px 12px; cursor: pointer; transition: background .14s ease, border-color .14s ease;
+        }
+        .q-item:hover { background: var(--bg-soft); }
+        .q-item.active { background: var(--primary-soft); border-color: var(--primary-line); }
+        .q-name { font-weight: 600; font-size: 13.5px; line-height: 1.4; display: flex; gap: 6px; align-items: flex-start; }
+        .q-name > span:first-child { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .q-busy { flex: 0 0 auto; width: 13px; height: 13px; margin-top: 3px; border-width: 2px; }
+        .q-meta { font-size: 12px; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+        .q-reason { font-size: 12px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .q-item.active .q-meta, .q-item.active .q-reason { color: #3c4f72; }
+        .signals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+        .signal {
+            display: inline-flex; align-items: center; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 600;
+            background: var(--bg-soft); color: var(--text-soft); border: 1px solid var(--border); font-variant-numeric: tabular-nums;
+        }
         .signal.online { background: var(--primary-soft); color: var(--primary-dark); border-color: var(--primary-line); }
         .signal.llm { background: #f5f0ff; color: #6d28d9; border-color: #ded0fb; }
         .signal.stale { background: var(--danger-soft); color: var(--danger); border-color: #f2c9cb; }
-
-        .detail-head {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            font-size: 15px;
-            font-weight: 700;
-            word-break: break-all;
+        .queue-foot { padding: 9px 14px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--text-mute); display: flex; align-items: center; gap: 6px; }
+        kbd {
+            font-family: var(--mono); font-size: 10.5px; padding: 0 5px; border-radius: 4px; line-height: 17px;
+            border: 1px solid var(--border-strong); border-bottom-width: 2px; background: #fff; color: var(--text-soft);
         }
+        .queue-empty { text-align: center; padding: 36px 16px; color: var(--text-mute); font-size: 13px; }
 
-        .detail-facts {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 10px;
-            margin-top: 14px;
-        }
-        .fact {
-            background: var(--bg-soft);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 9px 12px;
-        }
-        .fact-label { font-size: 11.5px; color: var(--text-mute); }
-        .fact-value { font-size: 13.5px; font-weight: 600; margin-top: 2px; word-break: break-all; }
+        /* ---------- 详情 ---------- */
+        .detail { padding: 0; min-height: 420px; display: flex; flex-direction: column; }
+        .detail-body { padding: 20px 22px 8px; flex: 1 1 auto; }
+        .detail-blank { display: grid; place-items: center; text-align: center; padding: 80px 24px; color: var(--text-mute); gap: 10px; }
+        .detail-blank svg { width: 36px; height: 36px; color: var(--border-strong); }
+        .detail-blank .big { font-size: 15px; font-weight: 700; color: var(--text); }
+        .detail.is-loading .detail-body { opacity: .45; pointer-events: none; transition: opacity .2s ease .12s; }
 
-        .cover-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin-top:8px; }
-        .cover-choice { border:2px solid var(--border); border-radius:8px; padding:7px; cursor:pointer; background:#fff; }
+        .d-back { display: none; margin: -6px 0 10px -8px; }
+        .d-title { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+        .d-title h2 { font-size: 18px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; min-width: 0; flex: 0 1 auto; }
+        .d-title .badge { margin-top: 3px; }
+        .d-path { font-family: var(--mono); font-size: 11.5px; color: var(--text-mute); margin-top: 4px; overflow-wrap: anywhere; }
+        .d-reason { margin-top: 8px; color: var(--text-soft); font-size: 13.5px; }
+        .d-facts { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 12px; font-size: 12.5px; }
+        .d-facts div { display: flex; gap: 6px; min-width: 0; }
+        .d-facts dt { color: var(--text-mute); white-space: nowrap; }
+        .d-facts dd { font-weight: 600; overflow-wrap: anywhere; }
+
+        /* 横幅：上一条处理结果 / 本条错误 / 已处置结果 */
+        .banner {
+            display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 10px 12px;
+            border-radius: var(--radius); border: 1px solid; font-size: 13px; line-height: 1.55;
+            animation: banner-in .28s cubic-bezier(.16, 1, .3, 1);
+        }
+        .banner svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 2px; }
+        .banner .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .banner .sub { color: inherit; opacity: .85; font-size: 12.5px; }
+        .banner.ok { background: var(--success-soft); border-color: #bfe3cc; color: #0e5a2f; }
+        .banner.err { background: var(--danger-soft); border-color: #f2c9cb; color: #8d1c22; }
+        .banner.warn { background: var(--warn-soft); border-color: #f1d3a6; color: #8a3f06; }
+        .banner.info { background: var(--info-soft); border-color: #b9e1ea; color: #0b5a70; }
+        .banner-close { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 2px; border-radius: 4px; opacity: .7; display: inline-flex; }
+        .banner-close:hover { opacity: 1; background: rgba(0,0,0,.05); }
+        @keyframes banner-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+        /* 系统建议 */
+        .verdict {
+            margin-top: 16px; padding: 14px 16px; border-radius: var(--radius); border: 1px solid var(--primary-line);
+            background: #f5f8ff; display: flex; gap: 12px; align-items: flex-start;
+        }
+        .verdict-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: 0 0 auto; background: var(--primary); color: #fff; }
+        .verdict-icon svg { width: 17px; height: 17px; }
+        .verdict-text { font-size: 15px; font-weight: 700; line-height: 1.45; }
+        .verdict-note { font-size: 12.5px; color: var(--text-soft); margin-top: 3px; }
+        .verdict.tone-warn { background: #fffaf0; border-color: #f1d3a6; }
+        .verdict.tone-warn .verdict-icon { background: var(--warn); }
+        .verdict.tone-info { background: #f2fafc; border-color: #b9e1ea; }
+        .verdict.tone-info .verdict-icon { background: var(--info); }
+        .verdict.tone-mute { background: var(--bg-soft); border-color: var(--border); }
+        .verdict.tone-mute .verdict-icon { background: #7a879b; }
+
+        .missing-box { margin-top: 14px; padding: 14px 16px; border-radius: var(--radius); background: #fffbea; border: 1px solid #f3df9b; color: #5f480d; font-size: 13px; }
+        .missing-box .t { font-weight: 700; color: #3f2f06; }
+        .missing-box ul { margin: 6px 0 0 18px; }
+        .missing-box .sub { font-size: 12.5px; color: #785b13; margin-top: 4px; }
+
+        /* 区块 */
+        .sec { margin-top: 26px; }
+        .sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .sec-title { font-size: 14px; font-weight: 700; }
+        .sec-meta { font-size: 12px; color: var(--text-mute); }
+        .sec-head .btn { margin-left: auto; align-self: center; }
+        .sec-foot { font-size: 12px; color: var(--text-mute); margin-top: 8px; line-height: 1.6; }
+
+        /* 候选：单选列表。选中项展开核对材料 */
+        .cands { display: grid; gap: 8px; }
+        .cand {
+            border: 1px solid var(--border); border-radius: var(--radius); background: #fff;
+            transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+        }
+        .cand-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 14px; cursor: pointer; border-radius: inherit; }
+        .cand.static .cand-row { cursor: default; grid-template-columns: minmax(0, 1fr) auto; }
+        .cand.static .radio { display: none; }
+        .cand:not(.static):not(.disabled):hover { border-color: #bcc5d3; }
+        .cand.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+        .cand.disabled .cand-row { cursor: not-allowed; }
+        .cand.disabled .cand-main, .cand.disabled .cand-stats { opacity: .6; }
+        .cand-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border-strong); background: #fff; position: relative; transition: border-color .15s ease; }
+        .cand.selected .radio { border-color: var(--primary); }
+        .cand.selected .radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--primary); }
+        .cand-title { font-weight: 600; font-size: 13.5px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; overflow-wrap: anywhere; }
+        .cand-sub { font-size: 12px; color: var(--text-mute); margin-top: 2px; overflow-wrap: anywhere; }
+        .cand-sub .id { font-family: var(--mono); font-size: 11px; }
+        .tag { display: inline-flex; align-items: center; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 18px; white-space: nowrap; }
+        .tag.sys { background: var(--primary); color: #fff; }
+        .tag.best { background: var(--success-soft); color: var(--success); }
+        .tag.llm { background: #f5f0ff; color: #6d28d9; }
+        .tag.near { background: #fff3c4; color: #7a5a00; }
+        .tag.stale { background: var(--danger-soft); color: var(--danger); }
+        .cand-stats { display: flex; gap: 18px; align-items: center; }
+        .stat { display: grid; gap: 1px; text-align: right; min-width: 52px; }
+        .stat-k { font-size: 11px; color: var(--text-mute); white-space: nowrap; }
+        .stat-v { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; }
+        .d-ok { color: var(--success); }
+        .d-warn { color: var(--warn); }
+        .d-bad { color: var(--danger); }
+        .meter { width: 52px; height: 6px; border-radius: 9px; background: #e8ecf2; overflow: hidden; display: inline-block; }
+        .meter i { display: block; height: 100%; background: #9aa7ba; border-radius: 9px; }
+        .meter i.hi { background: var(--success); }
+        .meter i.mid { background: var(--warn); }
+        .muted { color: var(--text-mute); }
+        .cand-need { font-size: 12px; color: var(--text-mute); white-space: nowrap; }
+
+        .cand-more { border-top: 1px solid var(--border); padding: 12px 14px 14px; background: #fafbfd; border-radius: 0 0 var(--radius) var(--radius); animation: banner-in .22s cubic-bezier(.16, 1, .3, 1); }
+        .cand-more-title { font-size: 12px; font-weight: 700; color: var(--text-soft); margin-bottom: 6px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+        .cand-more-title .hint { font-weight: 400; font-size: 11.5px; }
+        .cmp { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+        .cmp th { font-size: 11px; color: var(--text-mute); font-weight: 600; text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--border); }
+        .cmp td { text-align: right; padding: 3px 8px; border-bottom: 1px dashed #edf0f5; }
+        .cmp th:first-child, .cmp td:first-child { text-align: left; color: var(--text-mute); width: 36px; }
+        .cmp tr:last-child td { border-bottom: 0; }
+        .cmp-wrap { max-height: 300px; overflow-y: auto; }
+        .match-line { font-size: 12.5px; color: var(--text-soft); padding: 2px 0; overflow-wrap: anywhere; }
+        .match-line .num { font-family: var(--mono); font-size: 11.5px; color: var(--text-mute); margin-right: 6px; }
+        .src-line { font-size: 12.5px; color: var(--text-soft); padding: 2px 0; overflow-wrap: anywhere; }
+        .src-rel { font-family: var(--mono); font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--bg-soft); border: 1px solid var(--border); margin-right: 6px; }
+        .cand-reason { font-size: 12.5px; color: var(--text-soft); margin-top: 4px; }
+
+        .llm-box { padding: 12px 14px; border-radius: var(--radius); border: 1px solid #ded0fb; background: #faf7ff; font-size: 13px; }
+        .llm-box .sub { font-size: 12.5px; color: #5b4a86; margin-top: 3px; }
+
+        .plain-details > summary { cursor: pointer; font-size: 12.5px; color: var(--primary); list-style: none; display: inline-flex; gap: 6px; align-items: center; }
+        .plain-details > summary::-webkit-details-marker { display: none; }
+        .plain-details > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s ease; }
+        .plain-details[open] > summary::before { transform: rotate(45deg); }
+        .plain-details .body { margin-top: 8px; font-size: 12.5px; color: var(--text-soft); line-height: 1.65; }
+
+        .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; }
+        .table td.mono-s { font-family: var(--mono); font-size: 12px; }
+
+        /* ---------- 决策条 ---------- */
+        .decision {
+            position: sticky; bottom: 0; z-index: 20;
+            border-top: 1px solid var(--border);
+            background: rgba(255, 255, 255, .96);
+            backdrop-filter: saturate(1.4) blur(6px);
+            border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+            padding: 12px 22px;
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            box-shadow: 0 -8px 20px -14px rgba(18, 26, 38, .25);
+        }
+        .decision[hidden] { display: none; }
+        .decision-status { flex: 1 1 240px; min-width: 0; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+        .decision-status .k { color: var(--text-mute); white-space: nowrap; }
+        .decision-status .v { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .decision-status .muted { color: var(--text-mute); }
+        .decision-status .busy-label { font-weight: 600; color: var(--primary-dark); }
+        .decision-status .busy-sub { font-size: 12px; color: var(--text-mute); }
+        .decision-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+        .decision .spinner { width: 18px; height: 18px; border-width: 2.5px; flex: 0 0 auto; }
+        .btn .spinner { width: 14px; height: 14px; border-width: 2px; border-color: rgba(255,255,255,.4); border-top-color: #fff; }
+
+        .menu-wrap { position: relative; }
+        .menu {
+            position: absolute; right: 0; bottom: calc(100% + 8px); width: 300px; max-width: 86vw;
+            background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: 0 16px 40px -8px rgba(18, 26, 38, .25); padding: 6px; display: none; z-index: 40;
+            animation: banner-in .16s ease-out;
+        }
+        .menu.show { display: block; }
+        .menu-item {
+            display: grid; gap: 2px; width: 100%; text-align: left; border: 0; background: transparent; font: inherit;
+            padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer; color: var(--text);
+        }
+        .menu-item:hover:not(:disabled) { background: var(--bg-soft); }
+        .menu-item:disabled { opacity: .45; cursor: not-allowed; }
+        .menu-item .mi-t { font-size: 13px; font-weight: 600; }
+        .menu-item .mi-d { font-size: 12px; color: var(--text-mute); line-height: 1.5; }
+        .menu-item.danger .mi-t { color: var(--danger); }
+        .menu-item.danger:hover:not(:disabled) { background: var(--danger-soft); }
+
+        /* 确认弹窗里的摘要 */
+        .ask-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; padding: 12px 14px; border-radius: var(--radius); background: var(--bg-soft); border: 1px solid var(--border); font-size: 13px; }
+        .ask-facts dt { color: var(--text-mute); white-space: nowrap; }
+        .ask-facts dd { font-weight: 600; overflow-wrap: anywhere; }
+        .ask-body p { font-size: 13px; color: var(--text-soft); line-height: 1.65; }
+        .ask-body p + p { margin-top: 6px; }
+        .ask-warn { padding: 9px 12px; border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid #f1d3a6; color: #8a3f06; font-size: 12.5px; line-height: 1.6; }
+
+        .cover-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin-top:8px; }
+        .cover-choice { border:2px solid var(--border); border-radius:8px; padding:6px; cursor:pointer; background:#fff; text-align:left; font:inherit; }
         .cover-choice.selected { border-color:var(--primary); box-shadow:0 0 0 2px var(--primary-soft); }
-        .cover-choice img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:5px; background:var(--bg-soft); }
+        .cover-choice img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:5px; background:var(--bg-soft); display:block; }
         .cover-meta { font-size:11px; color:var(--text-mute); margin-top:5px; word-break:break-word; }
-        .section { margin-top: 22px; }
-        .section-title {
-            font-weight: 700;
-            font-size: 14px;
-            color: var(--text);
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
+        .cover-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+        @media (max-width: 1100px) { .desk { grid-template-columns: 280px minmax(0, 1fr); } .cand-stats { gap: 12px; } }
+        /* 窄屏：队列与详情二选一，打开条目即进入详情，左上角返回 */
+        @media (max-width: 980px) {
+            .desk { grid-template-columns: minmax(0, 1fr); }
+            .queue { position: static; max-height: none; }
+            .queue-list { max-height: none; }
+            .desk[data-view="detail"] .queue { display: none; }
+            .desk[data-view="queue"] .detail { display: none; }
+            .d-back { display: inline-flex; }
+            .queue-foot { display: none; }
+            .detail { scroll-margin-top: 72px; }
         }
-
-        .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-        .table-scroll { overflow-x: auto; }
-
-        .panel {
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 14px;
-            background: var(--bg-soft);
-            margin: 10px 0;
+        @media (max-width: 640px) {
+            .detail-body { padding: 16px 14px 8px; }
+            .decision { padding: 10px 14px; }
+            .cand-row { grid-template-columns: 20px minmax(0, 1fr); }
+            .cand.static .cand-row { grid-template-columns: minmax(0, 1fr); }
+            .cand-stats { grid-column: 2 / -1; justify-content: flex-start; flex-wrap: wrap; }
+            .cand.static .cand-stats { grid-column: 1 / -1; }
+            .stat { text-align: left; }
+            .stat-v { justify-content: flex-start; }
+            .decision { gap: 8px; }
+            .decision-status { flex-basis: 100%; font-size: 12.5px; }
+            .decision-status .busy-sub:not([data-elapsed]) { display: none; }
+            .decision-actions { width: 100%; margin-left: 0; flex-wrap: nowrap; }
+            .decision-actions .menu-wrap .btn span, .decision-actions [data-act="search"] span { display: none; }
+            .decision-actions .menu-wrap .btn, .decision-actions [data-act="search"] { padding: 6px 10px; }
+            .decision-actions [data-act="search"] svg, .decision-actions .menu-wrap .btn svg { width: 17px; height: 17px; }
+            .decision-actions .primary-slot { flex: 1 1 auto; }
+            .decision-actions .primary-slot .btn { width: 100%; }
+            .menu { right: auto; left: 0; }
         }
-        .panel.accent { background: #f7faff; border-color: var(--primary-line); }
-
-        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; align-items: center; }
-        .suggestion-card { margin-top: 14px; padding: 16px 18px; border: 1px solid var(--primary-line); border-radius: var(--radius); background: #f5f8ff; }
-        .suggestion-card.conflict { border-color: #f1d3a6; background: #fffaf0; }
-        .suggestion-card.archive { border-color: #f2c9cb; background: #fff7f7; }
-        .suggestion-title { font-size: 12px; color: var(--text-mute); font-weight: 600; }
-        .suggestion-conclusion { margin-top: 0; font-size: 15.5px; font-weight: 700; line-height: 1.45; }
-        .suggestion-signals { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
-        .suggestion-primary { margin-top: 12px; }
-        .online-search-recommended { color: var(--primary-dark); border-color: var(--primary-line); background: var(--primary-soft); font-weight: 700; }
-        .more-actions { width: 100%; margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--border); }
-        .more-actions summary { font-weight: 600; }
-        .more-actions-body { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
-        .filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .rejected-shortcut { cursor: pointer; border: 0; }
-        .kind-tabs { display: flex; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
-        .kind-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; cursor: pointer;
-            font-size: 13.5px; font-weight: 600; color: var(--text-mute); display: inline-flex; align-items: center; gap: 6px; }
-        .kind-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-        .kind-tab .tab-count { min-width: 18px; padding: 0 6px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-weight: 700;
-            font-size: 11px; line-height: 18px; text-align: center; display: none; }
-        .kind-tab .tab-count.show { display: inline-block; }
-        .panel.missing { background: #fffbea; border-color: #f3df9b; }
-        .closest-badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px; font-size: 11px;
-            background: var(--primary-soft); color: var(--primary-dark); font-weight: 700; }
-
-        .diff-ok { color: var(--success); font-weight: 600; }
-        tr.best td { background: #f6f9ff; }
-        tr.best td:first-child { font-weight: 600; }
-        .meter { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-        .meter-bar { width: 64px; height: 6px; border-radius: 9px; background: var(--bg-soft); border: 1px solid var(--border); overflow: hidden; display: inline-block; }
-        .meter-bar i { display: block; height: 100%; background: var(--primary); border-radius: 9px; }
-        .meter-bar i.lo { background: #c3ccd9; }
-        @media (max-width: 560px) { .meter-bar { display: none; } }
-        .diff-bad { color: var(--danger); font-weight: 600; }
-
-        details { margin-top: 8px; }
-        summary { cursor: pointer; font-size: 12.5px; color: var(--primary); }
-        .confidence-note { margin-top: 10px; padding: 9px 11px; border-radius: var(--radius-sm); background: #fffbea; border: 1px solid #f3df9b; color: #785b13; font-size: 12px; line-height: 1.6; }
-        .track-match { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
     </style>
 </head>
 <body>
@@ -180,56 +353,42 @@
             <p class="page-desc" data-i18n="review.page.subtitle">曲目已识别、专辑无法确定的文件夹，文件保持原样未写入标签</p>
         </div>
         <div class="page-actions">
-            <button class="btn ghost" onclick="loadList()">
+            <button class="btn ghost" id="refreshBtn" data-act="refresh">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                 <span data-i18n="review.nav.refresh">刷新</span>
             </button>
         </div>
     </div>
 
-    <div class="layout">
-        <section class="card">
-            <div class="card-head section-underline">
-                <div class="card-title">
-                    <span class="card-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                    </span>
-                    <span data-i18n="review.queue">队列</span>
+    <div class="desk" id="desk" data-view="queue">
+        <section class="card queue" aria-labelledby="queueTitle">
+            <div class="queue-top">
+                <span id="queueTitle" class="sr-only" data-i18n="review.queue" hidden>队列</span>
+                <div class="kind-tabs" id="kindTabs" role="tablist">
+                    <button class="kind-tab" role="tab" data-kind="ALBUM_UNRESOLVED">
+                        <span class="tab-label" data-i18n="review.tab.album">专辑待确认</span><span class="tab-count" id="tabCountAlbum"></span>
+                    </button>
+                    <button class="kind-tab" role="tab" data-kind="TRACKS_MISSING">
+                        <span class="tab-label" data-i18n="review.tab.missing">锁定专辑缺曲</span><span class="tab-count" id="tabCountMissing"></span>
+                    </button>
                 </div>
-            </div>
-            <div class="kind-tabs" id="kindTabs">
-                <button class="kind-tab" data-kind="ALBUM_UNRESOLVED" onclick="switchKind('ALBUM_UNRESOLVED')">
-                    <span data-i18n="review.tab.album">专辑待确认</span><span class="tab-count" id="tabCountAlbum"></span>
-                </button>
-                <button class="kind-tab" data-kind="TRACKS_MISSING" onclick="switchKind('TRACKS_MISSING')">
-                    <span data-i18n="review.tab.missing">锁定专辑缺曲</span><span class="tab-count" id="tabCountMissing"></span>
-                </button>
-            </div>
-            <div class="form-row" style="margin-bottom: 12px;">
-                <div class="filter-row">
-                    <select id="statusFilter" onchange="loadList()">
+                <div class="queue-filter">
+                    <select id="statusFilter" aria-label="status">
                         <option value="PENDING_REVIEW" data-i18n="review.filter.pending">待确认</option>
                         <option value="ALL" data-i18n="review.filter.all">全部</option>
                         <option value="CONFIRMED" data-i18n="review.filter.confirmed">已确认</option>
                         <option value="ARCHIVED_UNVERIFIED" data-i18n="review.filter.archived">按未收录归档</option>
-                        <option value="REJECTED" data-i18n="review.filter.rejected">已忽略</option>
+                        <option value="REJECTED" id="rejectedOption" data-i18n="review.filter.rejected">已忽略</option>
                     </select>
-                    <button class="badge rejected rejected-shortcut" id="rejectedShortcut" onclick="showRejected()"></button>
                 </div>
             </div>
-            <div class="queue-list" id="list"><div class="empty" data-i18n="review.loading">加载中...</div></div>
+            <div class="queue-list" id="list" role="listbox"><div class="queue-empty" data-i18n="review.loading">加载中...</div></div>
+            <div class="queue-foot"><kbd>J</kbd><kbd>K</kbd><span data-i18n="review.queue.keys">切换条目</span></div>
         </section>
 
-        <section class="card">
-            <div class="card-head section-underline">
-                <div class="card-title">
-                    <span class="card-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                    </span>
-                    <span data-i18n="review.detail">详情</span>
-                </div>
-            </div>
-            <div id="detail"><div class="empty" data-i18n="review.select.folder">请从左侧选择一个文件夹</div></div>
+        <section class="card detail" id="detailCard" aria-live="polite">
+            <div class="detail-body" id="detail"></div>
+            <div class="decision" id="decision" hidden></div>
         </section>
     </div>
 
@@ -242,9 +401,22 @@
     </footer>
 </main>
 </div>
-<!-- 确认联网候选：以前是五个连续的 prompt()，改成一个表单弹窗 -->
-<div class="overlay" id="onlineDialog">
-    <div class="dialog" style="width: min(520px, 96vw);">
+
+<!-- 通用二次确认：替代浏览器原生 confirm()，把「要做什么、作用在谁身上、后果」写清楚 -->
+<div class="overlay" id="askDialog" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+    <div class="dialog" style="width: min(500px, 96vw);">
+        <div class="dialog-title" id="askTitle"></div>
+        <div class="dialog-stack" id="askBody" style="margin-top: 12px;"></div>
+        <div class="dialog-actions">
+            <button class="btn ghost" data-ask="cancel" data-i18n="web.cancel">取消</button>
+            <button class="btn primary" data-ask="ok" id="askOk"></button>
+        </div>
+    </div>
+</div>
+
+<!-- 确认联网候选 -->
+<div class="overlay" id="onlineDialog" role="dialog" aria-modal="true">
+    <div class="dialog" style="width: min(560px, 96vw);">
         <div class="dialog-title" data-i18n="review.online.dialog.title">确认联网候选</div>
         <div class="dialog-subtitle" data-i18n="review.online.dialog.subtitle">所有文件先写入工作目录，全部成功后才原子提交归档。</div>
         <div class="dialog-stack">
@@ -269,34 +441,37 @@
                 <input id="ocDir" type="text" placeholder="留空则自动生成" data-i18n-placeholder="review.online.dir.placeholder">
             </div>
             <div class="form-row">
-                <label data-i18n="review.online.cover.choose">选择要嵌入的封面</label>
-                <button class="btn ghost sm" type="button" onclick="chooseNoCover()" data-i18n="review.online.cover.none">不使用封面</button>
+                <div class="cover-head">
+                    <label data-i18n="review.online.cover.choose">选择要嵌入的封面</label>
+                    <button class="btn ghost sm" type="button" id="noCoverBtn" data-i18n="review.online.cover.none">不使用封面</button>
+                </div>
                 <div id="coverChoices" class="cover-grid"><span class="hint" data-i18n="review.online.cover.loading">正在加载可用封面…</span></div>
             </div>
+            <div class="dialog-error" id="onlineError"></div>
         </div>
         <div class="dialog-actions">
-            <button class="btn ghost" onclick="closeOnlineDialog()" data-i18n="web.cancel">取消</button>
-            <button class="btn primary" onclick="submitOnlineConfirm()" data-i18n="review.online.submit">确认归档</button>
+            <button class="btn ghost" data-close="online" data-i18n="web.cancel">取消</button>
+            <button class="btn primary" id="onlineSubmit" data-i18n="review.online.submit">确认归档</button>
         </div>
     </div>
 </div>
 
 <!-- 音乐库已有相同音频 -->
-<div class="overlay" id="duplicateDialog">
+<div class="overlay" id="duplicateDialog" role="dialog" aria-modal="true">
     <div class="dialog" style="width: min(560px, 96vw);">
         <div class="dialog-title" data-i18n="review.duplicate.title">音乐库中已有相同音频</div>
         <div class="dialog-subtitle" data-i18n="review.duplicate.subtitle">尚未归档任何文件。请选择如何处理下列已存在的归档：</div>
         <div id="duplicateList" class="dialog-stack" style="font-size: 13px;"></div>
         <div class="dialog-actions">
-            <button class="btn ghost" onclick="resolveDuplicate(null)" data-i18n="web.cancel">取消</button>
-            <button class="btn soft" onclick="resolveDuplicate('KEEP_BOTH')" data-i18n="review.duplicate.keep.both">保留两份</button>
-            <button class="btn primary" id="duplicateReplaceBtn" onclick="resolveDuplicate('REPLACE')" data-i18n="review.duplicate.replace">替换旧归档</button>
+            <button class="btn ghost" data-dup="" data-i18n="web.cancel">取消</button>
+            <button class="btn soft" data-dup="KEEP_BOTH" data-i18n="review.duplicate.keep.both">保留两份</button>
+            <button class="btn primary" data-dup="REPLACE" id="duplicateReplaceBtn" data-i18n="review.duplicate.replace">替换旧归档</button>
         </div>
     </div>
 </div>
 
 <!-- 标记失败 / 忽略 -->
-<div class="overlay" id="rejectDialog">
+<div class="overlay" id="rejectDialog" role="dialog" aria-modal="true">
     <div class="dialog">
         <div class="dialog-title" data-i18n="review.reject.dialog.title">标记失败 / 忽略</div>
         <div class="dialog-subtitle" data-i18n="review.reject.dialog.subtitle">不写标签、不归档，仅记录以避免下一轮扫描反复重试。</div>
@@ -305,25 +480,48 @@
             <input id="rejectNote" type="text">
         </div>
         <div class="dialog-actions">
-            <button class="btn ghost" onclick="closeRejectDialog()" data-i18n="web.cancel">取消</button>
-            <button class="btn danger" onclick="submitReject()" data-i18n="review.reject.submit">确认忽略</button>
+            <button class="btn ghost" data-close="reject" data-i18n="web.cancel">取消</button>
+            <button class="btn danger" id="rejectSubmit" data-i18n="review.reject.submit">确认忽略</button>
         </div>
     </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
-    let csrfToken = null;
-    let currentId = null;
-    let currentItem = null;
-    let onlineSearchRunning = false;
-    // 当前 Tab：URL 带 #missing 时直接打开缺曲 Tab；否则首次加载时按待处理数量决定
-    let currentKind = location.hash === '#missing' ? 'TRACKS_MISSING'
-        : (location.hash === '#album' ? 'ALBUM_UNRESOLVED' : null);
     const t = (k, d) => I18n.t(k, d);
     const tf = (k, ...a) => I18n.tf(k, ...a);
+    const $ = id => document.getElementById(id);
 
+    const ICON = {
+        ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+        err: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
+        warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+        close: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+        back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+        spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>',
+        search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+        layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>',
+        inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 13h5l1 3h6l1-3h5"/></svg>',
+        dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>'
+    };
+
+    // ==================== 状态 ====================
+    const state = {
+        csrf: null,
+        kind: location.hash === '#missing' ? 'TRACKS_MISSING' : (location.hash === '#album' ? 'ALBUM_UNRESOLVED' : null),
+        items: [],          // 当前 Tab + 过滤条件下的列表
+        currentId: null,
+        item: null,         // 当前详情
+        selection: null,    // {type:'local', releaseId, releaseGroupId} | {type:'online', id}
+        busy: {},           // id -> {key, label, start}，允许在一条忙的时候去处理别的条目
+        alerts: {},         // id -> {tone, text}，持续显示直到关闭或下一次操作
+        flash: null,        // 上一条处理结果（自动跳到下一条时显示）
+        menuOpen: false
+    };
+
+    // ==================== 基础 ====================
     async function init() {
         await I18n.load();
         I18n.apply();
@@ -336,25 +534,27 @@
                     + ' <a href="/index.html">' + escapeHtml(t('review.main.panel')) + '</a>.</div></div></div>';
                 return;
             }
-            csrfToken = data.csrfToken;
+            state.csrf = data.csrfToken;
         } catch (e) {
             toast(t('review.auth.failed') + ': ' + e.message);
             return;
         }
-        document.getElementById('rejectedShortcut').textContent = tf('review.filter.rejected.count', 0);
-        loadList();
+        renderBlank();
+        await loadList({ autoOpen: !isNarrow() });
     }
 
+    let toastTimer = null;
     function toast(msg) {
-        const el = document.getElementById('toast');
+        const el = $('toast');
         el.textContent = msg;
         el.style.display = 'block';
-        setTimeout(() => { el.style.display = 'none'; }, 4000);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.style.display = 'none'; }, 4000);
     }
 
     async function api(path, options = {}) {
         options.headers = options.headers || {};
-        if (csrfToken) options.headers['X-CSRF-Token'] = csrfToken;
+        if (state.csrf) options.headers['X-CSRF-Token'] = state.csrf;
         if (options.body) options.headers['Content-Type'] = 'application/json';
         const resp = await fetch(path, options);
         let data = {};
@@ -366,6 +566,8 @@
         }
         return data;
     }
+
+    const isNarrow = () => window.matchMedia('(max-width: 980px)').matches;
 
     // 后端错误码 -> 人话。GET（展开）与 POST（处置）共用。
     const ERROR_KEYS = {
@@ -408,347 +610,796 @@
             REJECTED: ['rejected', 'review.status.rejected']
         };
         const entry = map[status];
-        const cls = entry ? entry[0] : '';
-        const text = entry ? t(entry[1]) : status;
-        return `<span class="badge ${cls}">${escapeHtml(text)}</span>`;
+        return `<span class="badge ${entry ? entry[0] : ''}">${escapeHtml(entry ? t(entry[1]) : status)}</span>`;
     }
 
-    async function loadRejectedCount() {
+    // ==================== 队列 ====================
+    async function loadStats() {
         try {
             const data = await api('/api/review/stats');
-            document.getElementById('rejectedShortcut').textContent = tf('review.filter.rejected.count', data.rejected || 0);
             setTabCount('tabCountAlbum', data.pendingAlbum || 0);
             setTabCount('tabCountMissing', data.pendingMissingTracks || 0);
+            $('rejectedOption').textContent = tf('review.filter.rejected.count', data.rejected || 0);
             return data;
         } catch (e) {
-            // 列表本身仍可使用，统计快捷入口失败不覆盖主要错误信息。
-            return null;
+            return null; // 统计失败不影响列表本身
         }
     }
 
     function setTabCount(id, count) {
-        const el = document.getElementById(id);
+        const el = $(id);
         el.textContent = count > 99 ? '99+' : String(count);
         el.classList.toggle('show', count > 0);
     }
 
     function applyKindTabs() {
-        document.querySelectorAll('#kindTabs .kind-tab').forEach(btn =>
-            btn.classList.toggle('active', btn.dataset.kind === currentKind));
+        document.querySelectorAll('#kindTabs .kind-tab').forEach(btn => {
+            const on = btn.dataset.kind === state.kind;
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
     }
 
     function switchKind(kind) {
-        if (currentKind === kind) return;
-        currentKind = kind;
+        if (state.kind === kind) return;
+        state.kind = kind;
         history.replaceState(null, '', kind === 'TRACKS_MISSING' ? '#missing' : '#album');
-        currentId = null;
-        currentItem = null;
-        document.getElementById('detail').innerHTML = `<div class="empty">${escapeHtml(t('review.select.folder'))}</div>`;
+        state.flash = null;
+        closeDetail();
         applyKindTabs();
-        loadList();
+        loadList({ autoOpen: !isNarrow() });
     }
 
-    function showRejected() {
-        document.getElementById('statusFilter').value = 'REJECTED';
-        loadList();
-    }
-
-    async function loadList() {
-        const stats = await loadRejectedCount();
+    /**
+     * 拉列表并重绘。autoOpen：当前没有打开条目时自动打开第一条，
+     * 用户进来就能直接开始处理，不用先点一下。
+     */
+    async function loadList({ autoOpen = false } = {}) {
+        const stats = await loadStats();
         if (window.Shell) Shell.refreshReviewCount();
-        if (!currentKind) {
+        if (!state.kind) {
             // 首次进入：哪个 Tab 有待处理就打开哪个，两个都有时优先「专辑待确认」
-            currentKind = stats && !(stats.pendingAlbum > 0) && stats.pendingMissingTracks > 0
+            state.kind = stats && !(stats.pendingAlbum > 0) && stats.pendingMissingTracks > 0
                 ? 'TRACKS_MISSING' : 'ALBUM_UNRESOLVED';
         }
         applyKindTabs();
-        const status = document.getElementById('statusFilter').value;
-        const listEl = document.getElementById('list');
+        const status = $('statusFilter').value;
+        const listEl = $('list');
         try {
             const data = await api('/api/review/list?status=' + encodeURIComponent(status));
-            data.items = (data.items || []).filter(item => (item.kind || 'ALBUM_UNRESOLVED') === currentKind);
-            if (!data.items || data.items.length === 0) {
-                listEl.innerHTML = `<div class="empty">${escapeHtml(t('review.no.items'))}</div>`;
-                return;
-            }
-            listEl.innerHTML = data.items.map(item => {
-                const localConfidence = item.localEvidenceAvailable && validScore(item.confidence)
-                    ? percent(item.confidence) : null;
-                const onlineCount = item.onlineCandidateCount || 0;
-                const llm = item.llmSuggestion;
-                return `
-                <div class="item ${item.id === currentId ? 'active' : ''}" onclick="openItem('${item.id}')">
-                    <div class="name">${escapeHtml(item.folderName || '')}</div>
-                    <div class="meta">
-                        ${statusBadge(item.status)}
-                        <span>${escapeHtml(tf('review.files.count', item.fileCount, item.candidateCount))}</span>
-                    </div>
-                    <div class="item-signals">
-                        ${localConfidence === null ? '' : `<span class="signal">${escapeHtml(tf('review.signal.local', localConfidence))}</span>`}
-                        ${onlineCount ? `<span class="signal online">${escapeHtml(tf('review.signal.online', onlineCount, percent(item.bestOnlineTrackCoverage)))}</span>` : ''}
-                        ${llm ? `<span class="signal llm">${escapeHtml(tf('review.signal.llm', percent(llm.confidence)))}</span>` : ''}
-                        ${item.onlineEvidenceStale ? `<span class="signal stale">${escapeHtml(t('review.signal.stale'))}</span>` : ''}
-                    </div>
-                    <div class="meta">${escapeHtml(item.reason || '')}</div>
-                </div>`;
-            }).join('');
+            state.items = (data.items || []).filter(item => (item.kind || 'ALBUM_UNRESOLVED') === state.kind);
         } catch (e) {
-            listEl.innerHTML = `<div class="empty">${escapeHtml(t('review.load.failed'))}: ${escapeHtml(e.message)}</div>`;
+            listEl.innerHTML = `<div class="queue-empty">${escapeHtml(t('review.load.failed'))}: ${escapeHtml(humanError(e.message))}</div>`;
+            return [];
         }
+        renderList();
+        if (autoOpen && !state.currentId && state.items.length) {
+            openItem(state.items[0].id);
+        } else if (!state.currentId) {
+            renderBlank();
+        }
+        return state.items;
     }
 
-    async function openItem(id, expand) {
-        currentId = id;
-        const detailEl = document.getElementById('detail');
-        detailEl.innerHTML = `<div class="empty">${escapeHtml(t('review.loading'))}</div>`;
-        try {
-            const url = '/api/review/item?id=' + encodeURIComponent(id) + (expand ? '&expand=1' : '');
-            const data = await api(url);
-            renderDetail(data.item);
-            loadList();
-        } catch (e) {
-            detailEl.innerHTML = `<div class="empty">${escapeHtml(t('review.load.failed'))}: ${escapeHtml(humanError(e.message))}</div>`;
+    function renderList() {
+        const listEl = $('list');
+        if (!state.items.length) {
+            listEl.innerHTML = `<div class="queue-empty">${escapeHtml(t('review.no.items'))}</div>`;
+            return;
         }
-    }
-
-    function renderDetail(item) {
-        currentItem = item;
-        const pending = item.status === 'PENDING_REVIEW';
-        const suggestion = item.systemSuggestion || {};
-        const primaryAction = suggestion.primaryAction || 'NONE';
-        const searchRecommended = suggestion.level === 'TRY_ONLINE_SEARCH';
-        // 时长相似度最高的候选整行高亮（并列取第一个）；行内「确认」一律用次按钮，主按钮只留给上方系统建议卡
-        const sims = (item.candidates || []).map(c => c.durationSimilarity == null ? -1 : c.durationSimilarity);
-        const bestSim = sims.length ? Math.max(...sims) : -1;
-        const bestIndex = bestSim >= 0 ? sims.indexOf(bestSim) : -1;
-        const candidateRows = (item.candidates || []).map((c, i) => {
-            const isBest = i === bestIndex;
-            const sim = c.durationSimilarity == null ? '-'
-                : `<span class="meter"><span class="meter-bar"><i class="${isBest ? '' : 'lo'}" style="width:${Math.max(0, Math.min(100, c.durationSimilarity * 100)).toFixed(0)}%"></i></span>${(c.durationSimilarity * 100).toFixed(1)}%</span>`;
-            const key = c.releaseId || '';
-            const rg = c.releaseGroupId || '';
-            const trackDelta = c.trackCount && item.fileCount
-                ? (c.trackCount - item.fileCount) : null;
-            const deltaText = trackDelta === null ? '' :
-                `<span class="${Math.abs(trackDelta) <= 1 ? 'diff-ok' : 'diff-bad'}">(${trackDelta >= 0 ? '+' : ''}${trackDelta})</span>`;
-            // 只有展开到具体 Release（有 releaseId）才能确认：
-            // 仅 Release Group 级则拿不到磟号/曲目号/发行日期，确认也是残缺的。
-            // 后端同样做了硬校验，这里只是避免误导。
-            const confirmCell = !pending ? ''
-                : (key
-                    ? `<button class="btn ghost sm" onclick="confirmCandidate('${key}','${rg}')">${escapeHtml(t('review.confirm'))}</button>`
-                    : `<span class="hint">${escapeHtml(t('review.need.expand'))}</span>`);
-            const closest = item.missingTracks && c.releaseId && c.releaseId === item.missingTracks.releaseId
-                ? `<span class="closest-badge">${escapeHtml(t('review.missing.closest.badge'))}</span>` : '';
-            return `<tr class="${isBest ? 'best' : ''}">
-                <td>${escapeHtml(c.title || '')}${closest}<div class="hint">${escapeHtml(c.releaseId || c.releaseGroupId || '')}</div></td>
-                <td>${escapeHtml(c.mediaFormat || '-')}</td>
-                <td>${c.trackCount || '-'} ${deltaText}</td>
-                <td>${sim}</td>
-                <td>${c.supportCount || 0}/${c.totalSamples || 0}</td>
-                <td>${confirmCell}</td>
-            </tr>`;
+        const pendingView = $('statusFilter').value === 'PENDING_REVIEW';
+        listEl.innerHTML = state.items.map(item => {
+            const local = item.localEvidenceAvailable && validScore(item.confidence) ? percent(item.confidence) : null;
+            const onlineCount = item.onlineCandidateCount || 0;
+            const llm = item.llmSuggestion;
+            const signals = [
+                local ? `<span class="signal">${escapeHtml(tf('review.signal.local', local))}</span>` : '',
+                onlineCount ? `<span class="signal online">${escapeHtml(tf('review.signal.online', onlineCount, percent(item.bestOnlineTrackCoverage)))}</span>` : '',
+                llm && validScore(llm.confidence) ? `<span class="signal llm">${escapeHtml(tf('review.signal.llm', percent(llm.confidence)))}</span>` : '',
+                item.onlineEvidenceStale ? `<span class="signal stale">${escapeHtml(t('review.signal.stale'))}</span>` : ''
+            ].join('');
+            const meta = [tf('review.files.count', item.fileCount, item.candidateCount), ago(item.createdAt)].filter(Boolean).join(' · ');
+            const busy = state.busy[item.id] ? '<span class="spinner q-busy" aria-hidden="true"></span>' : '';
+            return `<button type="button" class="q-item ${item.id === state.currentId ? 'active' : ''}" role="option"
+                    aria-selected="${item.id === state.currentId}" data-open="${escapeHtml(item.id)}">
+                <span class="q-name"><span>${escapeHtml(item.folderName || '')}</span>${busy}</span>
+                <span class="q-meta">${pendingView ? '' : statusBadge(item.status) + ' '}${escapeHtml(meta)}</span>
+                ${item.reason ? `<span class="q-reason" title="${escapeHtml(item.reason)}">${escapeHtml(item.reason)}</span>` : ''}
+                ${signals ? `<span class="signals">${signals}</span>` : ''}
+            </button>`;
         }).join('');
+    }
 
-        const llm = item.llmSuggestion;
-        const llmBlock = !llm ? '' : `
-            <div class="section">
-                <div class="section-title">${escapeHtml(t('review.llm.section'))}</div>
-                <div class="panel">
-                <div>${llm.choiceIndex > 0
-                    ? escapeHtml(t('review.llm.suggest')) + ' <strong>' + escapeHtml(llm.suggestedTitle || '') + '</strong>'
-                    : '<strong>' + escapeHtml(t('review.llm.none')) + '</strong>'
-                    }${llm.unreleasedCompilation ? ' · <strong>' + escapeHtml(t('review.llm.unreleased')) + '</strong>' : ''}</div>
-                <div class="hint">${escapeHtml(tf('review.llm.confidence', (llm.confidence * 100).toFixed(0) + '%'))} ·
-                    ${escapeHtml(tf('review.llm.model', llm.model || '', llm.provider || ''))}
-                    ${llm.applied ? '· <strong>' + escapeHtml(t('review.llm.applied')) + '</strong>' : '· ' + escapeHtml(t('review.llm.suggestion.only'))}</div>
-                <div class="hint">${escapeHtml(tf('review.llm.reason', llm.reason || ''))}</div>
-                <div class="hint">${escapeHtml(t('review.llm.note'))}</div>
-                </div>
-            </div>`;
+    function markActive() {
+        document.querySelectorAll('#list .q-item').forEach(el => {
+            const on = el.dataset.open === state.currentId;
+            el.classList.toggle('active', on);
+            el.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+    }
 
-        const onlineRows = (item.onlineCandidates || []).map(c => {
-            const localPaths = new Set((item.files || []).map(f => f.originalPath).filter(Boolean));
-            const matchedTracks = new Set((c.tracks || [])
-                .filter(t => t.matchConfidence >= 0.6 && localPaths.has(t.matchedFilePath))
-                .map(t => t.matchedFilePath)).size;
-            const totalLocal = (item.files || []).length;
-            const coverage = totalLocal ? matchedTracks / totalLocal : 0;
-            const trackRows = (c.tracks || []).filter(t => t.matchedFilePath).map(t => `
-                <div class="hint">${t.discNo || 1}-${t.trackNo || '-'} ${escapeHtml(t.title || '')}
-                    → ${escapeHtml(baseName(t.matchedFilePath))} · ${escapeHtml(tf('review.match', percent(t.matchConfidence)))}</div>`).join('');
-            return `<div class="panel accent">
-            <div><strong>${escapeHtml(c.title || '')}</strong>${c.edition ? ' · ' + escapeHtml(c.edition) : ''}</div>
-            <div class="hint">${escapeHtml(c.albumArtist || c.artist || '')} · ${escapeHtml(c.releaseDate || t('review.date.unknown'))}</div>
-            <div class="item-signals">
-                <span class="signal online">${escapeHtml(tf('review.signal.source.self', percent(c.confidence)))}</span>
-                <span class="signal">${escapeHtml(tf('review.signal.reliable.match', matchedTracks, totalLocal))}</span>
-                <span class="signal">${escapeHtml(tf('review.signal.local.coverage', percent(coverage)))}</span>
-            </div>
-            <div class="hint">${escapeHtml(c.reason || '')}</div>
-            <div class="hint">${escapeHtml(tf('review.tracklist.summary', (c.tracks||[]).length, (c.sources||[]).length))}</div>
-            ${trackRows ? `<details class="track-match"><summary>${escapeHtml(t('review.track.match.detail'))}</summary>${trackRows}</details>` : ''}
-            ${(c.sources||[]).map(s=>`<div class="hint">[${escapeHtml(s.reliability||'')}] ${linkOrText(s.url, s.title||s.domain||s.url)}${s.snippet?' — '+escapeHtml(s.snippet):''}</div>`).join('')}
-            ${pending && !item.onlineEvidenceStale ? `<button class="btn primary sm" style="margin-top:10px" onclick='confirmOnline(${escapeHtml(JSON.stringify(c.id))},${escapeHtml(JSON.stringify(c.title||''))},${escapeHtml(JSON.stringify(c.albumArtist||c.artist||''))},${escapeHtml(JSON.stringify(c.releaseDate||''))},${escapeHtml(JSON.stringify(c.edition||''))})'>${escapeHtml(t('review.online.confirm.btn'))}</button>` : ''}
+    function moveSelection(delta) {
+        if (!state.items.length) return;
+        const idx = state.items.findIndex(i => i.id === state.currentId);
+        const next = state.items[Math.max(0, Math.min(state.items.length - 1, idx < 0 ? 0 : idx + delta))];
+        if (next && next.id !== state.currentId) {
+            openItem(next.id);
+            const el = document.querySelector(`#list .q-item[data-open="${CSS.escape(next.id)}"]`);
+            if (el) el.scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    // ==================== 详情 ====================
+    function closeDetail() {
+        state.currentId = null;
+        state.item = null;
+        state.selection = null;
+        $('desk').dataset.view = 'queue';
+        renderBlank();
+    }
+
+    function renderBlank() {
+        const pendingView = $('statusFilter').value === 'PENDING_REVIEW';
+        const cleared = pendingView && state.items.length === 0;
+        $('detail').innerHTML = `${renderFlash()}<div class="detail-blank">
+            ${ICON.inbox}
+            <div class="big">${escapeHtml(cleared ? t('review.queue.clear.title') : t('review.select.folder'))}</div>
+            ${cleared ? `<div>${escapeHtml(t('review.queue.clear.desc'))}</div>` : ''}
         </div>`;
-        }).join('');
+        $('decision').hidden = true;
+    }
 
-        const fileRows = (item.files || []).map(f => `<tr>
-            <td>${escapeHtml(f.fileName || '')}</td>
-            <td>${escapeHtml(f.title || '')}</td>
-            <td>${escapeHtml(f.artist || '')}</td>
-            <td>${f.duration == null ? '-' : formatDuration(f.duration)}</td>
-        </tr>`).join('');
+    async function openItem(id, { keepFlash = false } = {}) {
+        if (!keepFlash) state.flash = null;
+        const switching = id !== state.currentId;
+        state.currentId = id;
+        state.menuOpen = false;
+        markActive();
+        $('desk').dataset.view = 'detail';
+        const card = $('detailCard');
+        card.classList.add('is-loading');
+        try {
+            const data = await api('/api/review/item?id=' + encodeURIComponent(id));
+            if (state.currentId !== id) return; // 用户已经切到别的条目
+            setItem(data.item, { resetSelection: switching });
+            // 只在详情顶部已滚出视口时才回滚，首次自动打开不要让页面跳动
+            if (switching && card.getBoundingClientRect().top < 0) {
+                card.scrollIntoView({ block: 'start', behavior: isNarrow() ? 'auto' : 'smooth' });
+            }
+        } catch (e) {
+            if (state.currentId !== id) return;
+            state.item = null;
+            $('detail').innerHTML = `<div class="detail-blank"><div class="big">${escapeHtml(t('review.load.failed'))}</div>
+                <div>${escapeHtml(humanError(e.message))}</div></div>`;
+            $('decision').hidden = true;
+        } finally {
+            if (state.currentId === id) card.classList.remove('is-loading');
+        }
+    }
 
-        document.getElementById('detail').innerHTML = `
-            <div class="detail-head">
-                <span>${escapeHtml(item.folderName || '')}</span> ${statusBadge(item.status)}
-            </div>
-            <div class="hint">${escapeHtml(item.folderPath || '')}</div>
-            <div class="hint">${escapeHtml(item.reason || '')}</div>
+    function setItem(item, { resetSelection }) {
+        const prev = state.selection;
+        state.item = item;
+        state.selection = resetSelection ? defaultSelection(item) : (selectionValid(item, prev) ? prev : defaultSelection(item));
+        renderDetail();
+    }
+
+    /** 系统建议指向的候选自动预选：建议、选择、确认是同一件事，不再分散在三处 */
+    function defaultSelection(item) {
+        if (item.status !== 'PENDING_REVIEW') return null;
+        const s = item.systemSuggestion || {};
+        const p = s.primaryActionParams || {};
+        if (s.primaryAction === 'CONFIRM_LOCAL' && p.releaseId) {
+            const c = (item.candidates || []).find(x => x.releaseId === p.releaseId);
+            if (c) return { type: 'local', releaseId: c.releaseId, releaseGroupId: c.releaseGroupId || '' };
+        }
+        if (s.primaryAction === 'CONFIRM_ONLINE' && p.onlineCandidateId && !item.onlineEvidenceStale) {
+            const c = (item.onlineCandidates || []).find(x => x.id === p.onlineCandidateId);
+            if (c) return { type: 'online', id: c.id };
+        }
+        return null;
+    }
+
+    function selectionValid(item, sel) {
+        if (!sel || item.status !== 'PENDING_REVIEW') return false;
+        if (sel.type === 'local') return (item.candidates || []).some(c => c.releaseId && c.releaseId === sel.releaseId);
+        if (sel.type === 'online') return !item.onlineEvidenceStale && (item.onlineCandidates || []).some(c => c.id === sel.id);
+        return false;
+    }
+
+    function selectedCandidate() {
+        const item = state.item, sel = state.selection;
+        if (!item || !sel) return null;
+        if (sel.type === 'local') return (item.candidates || []).find(c => c.releaseId === sel.releaseId) || null;
+        return (item.onlineCandidates || []).find(c => c.id === sel.id) || null;
+    }
+
+    function select(type, key) {
+        const item = state.item;
+        if (!item || item.status !== 'PENDING_REVIEW') return;
+        const cur = state.selection;
+        if (cur && cur.type === type && (type === 'local' ? cur.releaseId === key : cur.id === key)) {
+            state.selection = null; // 再点一次取消选择
+        } else if (type === 'local') {
+            const c = (item.candidates || []).find(x => x.releaseId === key);
+            if (!c) return;
+            state.selection = { type, releaseId: c.releaseId, releaseGroupId: c.releaseGroupId || '' };
+        } else {
+            if (item.onlineEvidenceStale) return;
+            state.selection = { type, id: key };
+        }
+        const y = window.scrollY;
+        renderDetail();
+        window.scrollTo(0, y);
+    }
+
+    function renderDetail() {
+        const item = state.item;
+        if (!item) return renderBlank();
+        const pending = item.status === 'PENDING_REVIEW';
+        const facts = [
+            ['review.fact.synth.title', item.synthesizedAlbumTitle || '-'],
+            ['review.fact.synth.artist', item.synthesizedAlbumArtist || '-'],
+            ['review.fact.local.evidence', item.localEvidenceAvailable && validScore(item.confidence) ? percent(item.confidence) : t('review.not.applicable')]
+        ];
+        $('detail').innerHTML = `
+            <button class="btn plain sm d-back" data-act="back">${ICON.back}<span>${escapeHtml(t('review.back.queue'))}</span></button>
+            <div class="d-title"><h2>${escapeHtml(item.folderName || '')}</h2>${statusBadge(item.status)}</div>
+            <div class="d-path">${escapeHtml(item.folderPath || '')}</div>
+            ${item.reason ? `<p class="d-reason">${escapeHtml(item.reason)}</p>` : ''}
+            <dl class="d-facts">${facts.map(([k, v]) => `<div><dt>${escapeHtml(t(k))}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl>
+            ${renderFlash()}
+            ${renderAlert(item)}
+            ${renderResolution(item)}
             ${renderMissingTracks(item)}
-            ${pending ? renderSystemSuggestion(item) : ''}
-            <div class="detail-facts">
-                <div class="fact">
-                    <div class="fact-label">${escapeHtml(t('review.fact.synth.title'))}</div>
-                    <div class="fact-value">${escapeHtml(item.synthesizedAlbumTitle || '-')}</div>
-                </div>
-                <div class="fact">
-                    <div class="fact-label">${escapeHtml(t('review.fact.synth.artist'))}</div>
-                    <div class="fact-value">${escapeHtml(item.synthesizedAlbumArtist || '-')}</div>
-                </div>
-                <div class="fact">
-                    <div class="fact-label">${escapeHtml(t('review.fact.local.evidence'))}</div>
-                    <div class="fact-value">${item.localEvidenceAvailable && validScore(item.confidence) ? percent(item.confidence) : escapeHtml(t('review.not.applicable'))}</div>
-                </div>
+            ${pending ? renderVerdict(item) : ''}
+            ${renderLocalCandidates(item)}
+            ${renderOnline(item)}
+            ${renderLlm(item)}
+            ${renderFiles(item)}
+            <div class="sec">
+                <details class="plain-details">
+                    <summary>${escapeHtml(t('review.scores.help'))}</summary>
+                    <div class="body">${escapeHtml(t('review.confidence.note'))}</div>
+                </details>
             </div>
-            <div class="confidence-note">${escapeHtml(t('review.confidence.note'))}</div>
-
-            ${(item.candidates || []).length ? `<div class="section">
-                <div class="section-title">
-                    ${escapeHtml(t('review.section.mb.candidates'))}
-                    ${item.candidatesExpanded ? '' :
-                        `<button class="btn ghost sm" onclick="openItem('${item.id}', true)">${escapeHtml(t('review.expand.releases'))}</button>
-                         <span class="hint">${escapeHtml(t('review.expand.retry.hint'))}</span>`}
-                </div>
-                ${candidateRows ? `<div class="table-wrap table-scroll"><table class="table">
-                    <thead><tr><th>${escapeHtml(t('review.table.album'))}</th><th>${escapeHtml(t('review.table.format'))}</th><th>${escapeHtml(t('review.table.tracks'))}</th><th>${escapeHtml(t('review.table.duration.similarity'))}</th><th>${escapeHtml(t('review.table.sample.support'))}</th><th></th></tr></thead>
-                    <tbody>${candidateRows}</tbody></table></div>`
-                    : `<div class="empty">${escapeHtml(t('review.no.candidates'))}</div>`}
-                <div class="hint">${escapeHtml(t('review.candidates.hint'))}</div>
-            </div>` : ''}
-
-            ${llmBlock}
-
-            ${(item.onlineCandidates||[]).length || (item.onlineClues||[]).length ? `<div class="section">
-                <div class="section-title">${escapeHtml(t('review.section.online'))} ${item.onlineEvidenceStale ? `<span class="badge rejected">${escapeHtml(t('review.evidence.stale'))}</span>` : ''}</div>
-                <div class="hint">${escapeHtml(tf('review.online.meta', item.onlineSearchProvider||'', item.onlineSearchModel||'', item.onlineSearchedAt?new Date(item.onlineSearchedAt).toLocaleString():'-'))}</div>
-                ${onlineRows || `<div class="empty">${escapeHtml(t('review.online.none'))}</div>`}
-                ${(item.onlineClues||[]).length ? `<details><summary>${escapeHtml(tf('review.clues.summary', item.onlineClues.length))}</summary>${item.onlineClues.map(s=>`<div class="hint">${linkOrText(s.url, s.title||s.url||t('review.clue'))}</div>`).join('')}</details>`:''}
-            </div>` : ''}
-
-            <div class="section">
-                <div class="section-title">${escapeHtml(tf('review.section.files', (item.files || []).length))}</div>
-                <div class="table-wrap table-scroll"><table class="table">
-                    <thead><tr><th>${escapeHtml(t('review.table.filename'))}</th><th>${escapeHtml(t('review.table.track'))}</th><th>${escapeHtml(t('review.table.artist'))}</th><th>${escapeHtml(t('review.table.length'))}</th></tr></thead>
-                    <tbody>${fileRows}</tbody>
-                </table></div>
-            </div>
-
-            <div class="actions">
-                ${item.status === 'REJECTED' ? `<button class="btn primary" onclick="unrejectItem()">
-                    ${escapeHtml(t('review.action.unreject'))}
-                </button>` : ''}
-                ${pending ? `<button class="btn ghost ${searchRecommended ? 'online-search-recommended' : ''}" id="onlineSearchBtn" ${onlineSearchRunning ? 'disabled' : ''} onclick="onlineSearch()">
-                    ${escapeHtml(t('review.action.online.search'))}
-                </button>` : ''}
-                ${pending ? `<details class="more-actions">
-                    <summary>${escapeHtml(t('review.action.more'))}</summary>
-                    <div class="more-actions-body">
-                        ${item.llmJudgeEnabled ? `<button class="btn ghost" ${suggestion.hasReleaseLevelCandidate ? '' : 'disabled'} onclick="llmJudge()">
-                            ${escapeHtml(t('review.action.llm.choose'))}
-                        </button>` : ''}
-                        ${primaryAction === 'ARCHIVE' ? '' : `<button class="btn ghost" onclick="archiveItem(false)">
-                            ${escapeHtml(t('review.action.archive'))}
-                        </button>`}
-                        <button class="btn danger" onclick="rejectItem()">${escapeHtml(t('review.action.reject'))}</button>
-                    </div>
-                </details>` : ''}
-            </div>
-            <div class="hint" style="margin-top: 12px;">
-                ${escapeHtml(t('review.action.hint.confirm'))}<br>
-                ${escapeHtml(t('review.action.hint.archive'))}<br>
-                ${escapeHtml(t('review.action.hint.reject'))}
-            </div>
-            ${item.resolutionNote ? `<div class="hint">${escapeHtml(tf('review.resolution', item.resolutionNote))}</div>` : ''}
+            <div style="height: 14px"></div>
         `;
+        renderDecision();
+    }
+
+    function renderFlash() {
+        const f = state.flash;
+        if (!f) return '';
+        const head = tf('review.done.' + f.status, f.folderName || '');
+        const tail = f.next ? t('review.done.next') : (f.cleared ? t('review.queue.clear.title') : '');
+        return `<div class="banner ok">${ICON.ok}<div class="grow"><div><strong>${escapeHtml(head)}</strong>${tail ? ' · ' + escapeHtml(tail) : ''}</div>
+            ${f.note ? `<div class="sub">${escapeHtml(f.note)}</div>` : ''}</div>
+            <button class="banner-close" data-act="dismiss-flash" aria-label="${escapeHtml(t('review.dismiss'))}">${ICON.close}</button></div>`;
+    }
+
+    function renderAlert(item) {
+        const a = state.alerts[item.id];
+        if (!a) return '';
+        return `<div class="banner ${a.tone}" role="alert">${ICON[a.tone] || ICON.err}<div class="grow">${escapeHtml(a.text)}</div>
+            <button class="banner-close" data-act="dismiss-alert" aria-label="${escapeHtml(t('review.dismiss'))}">${ICON.close}</button></div>`;
+    }
+
+    function renderResolution(item) {
+        if (item.status === 'PENDING_REVIEW') return '';
+        const tone = item.status === 'REJECTED' ? 'warn' : (item.status === 'CONFIRMED' ? 'ok' : 'info');
+        // 已忽略还能撤销，不能说「无需继续操作」
+        const head = item.status === 'REJECTED' ? t('review.status.rejected') : t('review.suggestion.level.RESOLVED');
+        return `<div class="banner ${tone}">${ICON[tone]}<div class="grow"><strong>${escapeHtml(head)}</strong>
+            ${item.resolutionNote ? `<div class="sub">${escapeHtml(tf('review.resolution', item.resolutionNote))}</div>` : ''}</div></div>`;
     }
 
     function renderMissingTracks(item) {
         const m = item.missingTracks;
         if (item.kind !== 'TRACKS_MISSING' || !m) return '';
         const unmatched = Object.entries(m.unmatchedFiles || {});
-        return `<div class="panel missing">
-            <div class="section-title">${escapeHtml(t('review.missing.section'))}</div>
-            <div><strong>${escapeHtml(tf('review.missing.closest', m.albumTitle || '-', m.albumArtist || '-'))}</strong></div>
-            <div class="hint">${escapeHtml(tf('review.missing.counts', m.localTrackCount || '-', m.releaseTrackCount || '-', Math.max(1, m.unmatchedLocalCount || 0)))}</div>
-            ${unmatched.length ? `<div class="hint">${escapeHtml(t('review.missing.unmatched.files'))}</div>
-                ${unmatched.map(([file, title]) => `<div class="hint">· ${escapeHtml(file)}${title ? ' → ' + escapeHtml(title) : ''}</div>`).join('')}` : ''}
-            <div class="hint">${escapeHtml(t(m.detectedBy === 'TRACK_CHECK' ? 'review.missing.detected.track' : 'review.missing.detected.lock'))}</div>
-            <div class="hint" style="margin-top:6px">${escapeHtml(t('review.missing.hint'))}</div>
+        return `<div class="missing-box">
+            <div class="t">${escapeHtml(tf('review.missing.closest', m.albumTitle || '-', m.albumArtist || '-'))}</div>
+            <div class="sub">${escapeHtml(tf('review.missing.counts', m.localTrackCount || '-', m.releaseTrackCount || '-', Math.max(1, m.unmatchedLocalCount || 0)))}
+                · ${escapeHtml(t(m.detectedBy === 'TRACK_CHECK' ? 'review.missing.detected.track' : 'review.missing.detected.lock'))}</div>
+            ${unmatched.length ? `<div class="sub" style="margin-top:8px">${escapeHtml(t('review.missing.unmatched.files'))}</div>
+                <ul>${unmatched.map(([file, title]) => `<li>${escapeHtml(file)}${title ? ' → ' + escapeHtml(title) : ''}</li>`).join('')}</ul>` : ''}
+            <div class="sub" style="margin-top:8px">${escapeHtml(t('review.missing.hint'))}</div>
         </div>`;
     }
 
-    function renderSystemSuggestion(item) {
-        const suggestion = item.systemSuggestion;
-        if (!suggestion) return '';
-        const level = suggestion.level || 'WEAK_ALL';
-        const params = suggestion.primaryActionParams || {};
-        const localScore = validScore(suggestion.localScore) ? percent(suggestion.localScore) : null;
-        const onlineScore = validScore(suggestion.onlineScore) ? percent(suggestion.onlineScore) : null;
-        const llmScore = validScore(suggestion.llmScore) ? percent(suggestion.llmScore) : null;
-        const signals = [];
-        if (localScore) signals.push(`<span class="signal">${escapeHtml(tf('review.suggestion.signal.local', localScore))}</span>`);
-        if (onlineScore) signals.push(`<span class="signal online">${escapeHtml(tf('review.suggestion.signal.online', onlineScore))}</span>`);
-        if (llmScore) signals.push(`<span class="signal llm">${escapeHtml(tf('review.suggestion.signal.llm', llmScore))}</span>`);
-        if (suggestion.onlineEvidenceStale) signals.push(`<span class="signal stale">${escapeHtml(t('review.signal.stale'))}</span>`);
+    const LEVEL_TONE = {
+        CONFIRM_LOCAL: 'ok', CONFIRM_ONLINE: 'ok', CONFLICT: 'warn', SUGGEST_ARCHIVE_UNVERIFIED: 'warn',
+        NEEDS_EXPAND: 'info', TRY_ONLINE_SEARCH: 'info', WEAK_ALL: 'mute'
+    };
 
-        let note = '';
-        if (suggestion.llmDirection) {
-            note = `<div class="hint">${escapeHtml(t('review.suggestion.llm.' + suggestion.llmDirection))}</div>`;
+    function renderVerdict(item) {
+        const s = item.systemSuggestion;
+        if (!s) return '';
+        const level = s.level || 'WEAK_ALL';
+        const tone = LEVEL_TONE[level] || 'mute';
+        const notes = [];
+        if (s.llmDirection) notes.push(t('review.suggestion.llm.' + s.llmDirection));
+        const p = s.primaryActionParams || {};
+        if (s.primaryAction === 'CONFIRM_LOCAL') {
+            const c = (item.candidates || []).find(x => x.releaseId && x.releaseId === p.releaseId);
+            notes.push(c ? tf('review.verdict.preselected', candidateLabel(c)) : t('review.suggestion.action.unavailable'));
+        } else if (s.primaryAction === 'CONFIRM_ONLINE') {
+            const c = (item.onlineCandidates || []).find(x => x.id === p.onlineCandidateId);
+            notes.push(c && !s.onlineEvidenceStale ? tf('review.verdict.preselected.online', onlineLabel(c)) : t('review.suggestion.action.unavailable'));
+        } else if (s.onlineEvidenceStale) {
+            notes.push(t('review.online.select.stale'));
         }
-        let button = '';
-        if (suggestion.primaryAction === 'CONFIRM_LOCAL') {
-            const current = (item.candidates || []).find(c => c.releaseId && c.releaseId === params.releaseId);
-            if (current) {
-                button = `<button class="btn primary" onclick='confirmCandidate(${JSON.stringify(current.releaseId)},${JSON.stringify(current.releaseGroupId || '')})'>${escapeHtml(t('review.suggestion.action.confirm'))}</button>`;
-            } else {
-                note += `<div class="hint">${escapeHtml(t('review.suggestion.action.unavailable'))}</div>`;
-            }
-        } else if (suggestion.primaryAction === 'EXPAND') {
-            button = `<button class="btn primary" onclick="openItem('${item.id}', true)">${escapeHtml(t('review.suggestion.action.expand'))}</button>`;
-        } else if (suggestion.primaryAction === 'ONLINE_SEARCH') {
-            button = `<button class="btn primary" ${onlineSearchRunning ? 'disabled' : ''} onclick="onlineSearch()">${escapeHtml(t('review.suggestion.action.search'))}</button>`;
-        } else if (suggestion.primaryAction === 'CONFIRM_ONLINE') {
-            const current = (item.onlineCandidates || []).find(c => c.id && c.id === params.onlineCandidateId);
-            if (current && !suggestion.onlineEvidenceStale) {
-                button = `<button class="btn primary" onclick='confirmOnline(${escapeHtml(JSON.stringify(current.id))},${escapeHtml(JSON.stringify(current.title || ''))},${escapeHtml(JSON.stringify(current.albumArtist || current.artist || ''))},${escapeHtml(JSON.stringify(current.releaseDate || ''))},${escapeHtml(JSON.stringify(current.edition || ''))})'>${escapeHtml(t('review.suggestion.action.confirm.online'))}</button>`;
-            } else {
-                note += `<div class="hint">${escapeHtml(t('review.suggestion.action.unavailable'))}</div>`;
-            }
-        } else if (suggestion.primaryAction === 'ARCHIVE') {
-            button = `<button class="btn danger" onclick="archiveItem(true)">${escapeHtml(t('review.action.archive.recommended'))}</button>`;
+        const icon = tone === 'ok' ? ICON.spark : (tone === 'warn' ? ICON.warn : (level === 'NEEDS_EXPAND' ? ICON.layers : (level === 'TRY_ONLINE_SEARCH' ? ICON.search : ICON.info)));
+        return `<section class="verdict ${tone === 'ok' ? '' : 'tone-' + tone}" aria-label="${escapeHtml(t('review.suggestion.title'))}">
+            <span class="verdict-icon">${icon}</span>
+            <div><div class="verdict-text">${escapeHtml(t('review.suggestion.level.' + level))}</div>
+            ${notes.map(n => `<div class="verdict-note">${escapeHtml(n)}</div>`).join('')}</div>
+        </section>`;
+    }
+
+    function candidateLabel(c) {
+        return [c.title, c.mediaFormat, c.trackCount ? tf('review.tracks.n', c.trackCount) : ''].filter(Boolean).join(' · ');
+    }
+    function onlineLabel(c) {
+        return [c.title, c.edition, c.albumArtist || c.artist].filter(Boolean).join(' · ');
+    }
+
+    function simClass(v) { return v >= 0.85 ? 'hi' : (v >= 0.75 ? 'mid' : ''); }
+
+    function renderLocalCandidates(item) {
+        const list = item.candidates || [];
+        if (!list.length) return '';
+        const pending = item.status === 'PENDING_REVIEW';
+        const sims = list.map(c => c.durationSimilarity == null ? -1 : c.durationSimilarity);
+        const bestSim = Math.max(...sims);
+        const bestIndex = bestSim >= 0 ? sims.indexOf(bestSim) : -1;
+        const s = item.systemSuggestion || {};
+        const sysRelease = (s.primaryAction === 'CONFIRM_LOCAL' && s.primaryActionParams) ? s.primaryActionParams.releaseId : null;
+        const llm = item.llmSuggestion;
+        const llmRelease = llm && llm.choiceIndex > 0 ? llm.suggestedReleaseId : null;
+        const sel = state.selection;
+
+        const rows = list.map((c, i) => {
+            const selectable = pending && !!c.releaseId;
+            const selected = !!(sel && sel.type === 'local' && c.releaseId && sel.releaseId === c.releaseId);
+            const tags = [
+                c.releaseId && c.releaseId === sysRelease ? `<span class="tag sys">${escapeHtml(t('review.badge.suggested'))}</span>` : '',
+                i === bestIndex && list.length > 1 ? `<span class="tag best">${escapeHtml(t('review.badge.best'))}</span>` : '',
+                c.releaseId && c.releaseId === llmRelease ? `<span class="tag llm">${escapeHtml(t('review.badge.llm'))}</span>` : '',
+                item.missingTracks && c.releaseId && c.releaseId === item.missingTracks.releaseId ? `<span class="tag near">${escapeHtml(t('review.missing.closest.badge'))}</span>` : ''
+            ].join('');
+            const sub = [c.artist, c.date, c.mediaFormat].filter(Boolean).map(escapeHtml).join(' · ');
+            const delta = c.trackCount && item.fileCount ? c.trackCount - item.fileCount : null;
+            const deltaHtml = delta === null ? '' : `<span class="${Math.abs(delta) <= 1 ? 'd-ok' : 'd-bad'}">${delta >= 0 ? '+' : ''}${delta}</span>`;
+            const simHtml = c.durationSimilarity == null ? '<span class="muted">—</span>'
+                : `<span class="meter"><i class="${simClass(c.durationSimilarity)}" style="width:${clampPct(c.durationSimilarity)}%"></i></span>${(c.durationSimilarity * 100).toFixed(1)}%`;
+            const stats = c.releaseId || !pending ? `<div class="cand-stats">
+                    <div class="stat"><span class="stat-k">${escapeHtml(t('review.table.tracks'))}</span><span class="stat-v">${c.trackCount || '—'} ${deltaHtml}</span></div>
+                    <div class="stat"><span class="stat-k">${escapeHtml(t('review.table.duration.similarity'))}</span><span class="stat-v">${simHtml}</span></div>
+                    <div class="stat"><span class="stat-k">${escapeHtml(t('review.table.sample.support'))}</span><span class="stat-v">${c.supportCount || 0}/${c.totalSamples || 0}</span></div>
+                </div>`
+                : `<span class="cand-need">${escapeHtml(t('review.need.expand'))}</span>`;
+            const attrs = selectable
+                ? `role="radio" tabindex="0" aria-checked="${selected}" data-select="local" data-key="${escapeHtml(c.releaseId)}"`
+                : '';
+            return `<div class="cand ${selected ? 'selected' : ''} ${pending ? (selectable ? '' : 'disabled') : 'static'}">
+                <div class="cand-row" ${attrs}>
+                    <span class="radio" aria-hidden="true"></span>
+                    <div class="cand-main">
+                        <div class="cand-title">${escapeHtml(c.title || '')}${tags}</div>
+                        <div class="cand-sub">${sub ? sub + ' · ' : ''}<span class="id">${escapeHtml(c.releaseId || c.releaseGroupId || '')}</span></div>
+                    </div>
+                    ${stats}
+                </div>
+                ${selected ? renderCompare(item, c) : ''}
+            </div>`;
+        }).join('');
+
+        const expandBtn = pending && !item.candidatesExpanded
+            ? `<button class="btn ghost sm" data-act="expand" ${state.busy[item.id] ? 'disabled' : ''}>${escapeHtml(t('review.expand.releases'))}</button>` : '';
+        return `<section class="sec">
+            <div class="sec-head"><span class="sec-title">${escapeHtml(t('review.section.mb.candidates'))}</span>
+                <span class="sec-meta">${list.length}</span>${expandBtn}</div>
+            <div class="cands" ${pending ? 'role="radiogroup"' : ''}>${rows}</div>
+            <div class="sec-foot">${escapeHtml(t('review.candidates.hint'))}${expandBtn ? ' ' + escapeHtml(t('review.expand.retry.hint')) : ''}</div>
+        </section>`;
+    }
+
+    /** 逐曲时长对照：后端早就算好了 durationDiff，以前没展示，用户只能对着一个百分比猜 */
+    function renderCompare(item, c) {
+        const local = item.durationSequence || [];
+        const rel = c.durations || [];
+        const diff = c.durationDiff || [];
+        const n = Math.max(local.length, rel.length);
+        if (!n || !rel.length) {
+            return `<div class="cand-more"><div class="hint">${escapeHtml(t('review.compare.none'))}</div></div>`;
         }
-        const cardClass = level === 'CONFLICT' ? ' conflict' : (level === 'SUGGEST_ARCHIVE_UNVERIFIED' ? ' archive' : '');
-        return `<div class="suggestion-card${cardClass}">
-            <div class="suggestion-conclusion">${escapeHtml(t('review.suggestion.level.' + level))}</div>
-            ${note}
-            ${signals.length ? `<div class="suggestion-signals">${signals.join('')}</div>` : ''}
-            ${button ? `<div class="suggestion-primary">${button}</div>` : ''}
+        let rows = '';
+        for (let i = 0; i < n; i++) {
+            const d = diff[i] != null ? diff[i] : (local[i] != null && rel[i] != null ? local[i] - rel[i] : null);
+            const cls = d == null ? 'd-bad' : (Math.abs(d) <= 2 ? 'd-ok' : (Math.abs(d) <= 7 ? 'd-warn' : 'd-bad'));
+            rows += `<tr><td>${i + 1}</td>
+                <td>${local[i] != null ? formatDuration(local[i]) : '—'}</td>
+                <td>${rel[i] != null ? formatDuration(rel[i]) : '—'}</td>
+                <td class="${cls}">${d == null ? '—' : (d > 0 ? '+' : '') + d + 's'}</td></tr>`;
+        }
+        return `<div class="cand-more">
+            <div class="cand-more-title">${escapeHtml(t('review.compare.title'))}<span class="hint">${escapeHtml(t('review.compare.hint'))}</span></div>
+            <div class="cmp-wrap"><table class="cmp">
+                <thead><tr><th>#</th><th>${escapeHtml(t('review.compare.local'))}</th><th>${escapeHtml(t('review.compare.release'))}</th><th>${escapeHtml(t('review.compare.diff'))}</th></tr></thead>
+                <tbody>${rows}</tbody></table></div>
         </div>`;
     }
 
-    let pendingOnlineCandidateId = null;
+    function renderOnline(item) {
+        const list = item.onlineCandidates || [];
+        const clues = item.onlineClues || [];
+        if (!list.length && !clues.length) return '';
+        const pending = item.status === 'PENDING_REVIEW';
+        const stale = !!item.onlineEvidenceStale;
+        const s = item.systemSuggestion || {};
+        const sysId = s.primaryAction === 'CONFIRM_ONLINE' && s.primaryActionParams ? s.primaryActionParams.onlineCandidateId : null;
+        const sel = state.selection;
+        const localPaths = new Set((item.files || []).map(f => f.originalPath).filter(Boolean));
+        const totalLocal = (item.files || []).length;
+
+        const cards = list.map(c => {
+            const matched = new Set((c.tracks || [])
+                .filter(x => x.matchConfidence >= 0.6 && localPaths.has(x.matchedFilePath))
+                .map(x => x.matchedFilePath)).size;
+            const coverage = totalLocal ? matched / totalLocal : 0;
+            const selectable = pending && !stale && !!c.id;
+            const selected = !!(sel && sel.type === 'online' && sel.id === c.id);
+            const tags = [
+                c.id && c.id === sysId ? `<span class="tag sys">${escapeHtml(t('review.badge.suggested'))}</span>` : '',
+                c.edition ? `<span class="tag" style="background:var(--bg-soft);color:var(--text-soft)">${escapeHtml(c.edition)}</span>` : ''
+            ].join('');
+            const sub = [c.albumArtist || c.artist, c.releaseDate || t('review.date.unknown')].filter(Boolean).map(escapeHtml).join(' · ');
+            const covCls = coverage >= 0.85 ? 'd-ok' : (coverage >= 0.6 ? 'd-warn' : 'd-bad');
+            const trackRows = (c.tracks || []).filter(x => x.matchedFilePath).map(x => `<div class="match-line"><span class="num">${x.discNo || 1}-${x.trackNo || '-'}</span>${escapeHtml(x.title || '')}
+                → ${escapeHtml(baseName(x.matchedFilePath))} · ${escapeHtml(tf('review.match', percent(x.matchConfidence)))}</div>`).join('');
+            const sources = (c.sources || []).map(src => `<div class="src-line"><span class="src-rel">${escapeHtml(src.reliability || '?')}</span>${linkOrText(src.url, src.title || src.domain || src.url)}${src.snippet ? ' — ' + escapeHtml(src.snippet) : ''}</div>`).join('');
+            const attrs = selectable ? `role="radio" tabindex="0" aria-checked="${selected}" data-select="online" data-key="${escapeHtml(c.id)}"` : '';
+            return `<div class="cand ${selected ? 'selected' : ''} ${pending ? (selectable ? '' : 'disabled') : 'static'}">
+                <div class="cand-row" ${attrs}>
+                    <span class="radio" aria-hidden="true"></span>
+                    <div class="cand-main">
+                        <div class="cand-title">${escapeHtml(c.title || '')}${tags}</div>
+                        <div class="cand-sub">${sub}</div>
+                        ${c.reason ? `<div class="cand-reason">${escapeHtml(c.reason)}</div>` : ''}
+                    </div>
+                    <div class="cand-stats">
+                        <div class="stat"><span class="stat-k">${escapeHtml(t('review.stat.reliable.match'))}</span><span class="stat-v ${covCls}">${matched}/${totalLocal}</span></div>
+                        <div class="stat"><span class="stat-k">${escapeHtml(t('review.stat.local.coverage'))}</span><span class="stat-v"><span class="meter"><i class="${simClass(coverage)}" style="width:${clampPct(coverage)}%"></i></span>${percent(coverage)}</span></div>
+                        <div class="stat"><span class="stat-k">${escapeHtml(t('review.stat.source.self'))}</span><span class="stat-v">${percent(c.confidence)}</span></div>
+                    </div>
+                </div>
+                ${selected || !pending ? `<div class="cand-more">
+                    <div class="cand-more-title">${escapeHtml(t('review.track.match.detail'))}<span class="hint">${escapeHtml(tf('review.tracklist.summary', (c.tracks || []).length, (c.sources || []).length))}</span></div>
+                    ${trackRows || `<div class="hint">—</div>`}
+                    ${sources ? `<div class="cand-more-title" style="margin-top:10px">${escapeHtml(t('review.source'))}</div>${sources}` : ''}
+                </div>` : ''}
+            </div>`;
+        }).join('');
+
+        return `<section class="sec">
+            <div class="sec-head"><span class="sec-title">${escapeHtml(t('review.section.online'))}</span>
+                ${stale ? `<span class="tag stale">${escapeHtml(t('review.evidence.stale'))}</span>` : ''}
+                <span class="sec-meta">${escapeHtml(tf('review.online.meta', item.onlineSearchProvider || '', item.onlineSearchModel || '', item.onlineSearchedAt ? new Date(item.onlineSearchedAt).toLocaleString() : '-'))}</span></div>
+            ${stale && pending ? `<div class="banner warn" style="margin:0 0 10px">${ICON.warn}<div class="grow">${escapeHtml(t('review.online.select.stale'))}</div></div>` : ''}
+            ${cards ? `<div class="cands" ${pending ? 'role="radiogroup"' : ''}>${cards}</div>` : `<div class="hint">${escapeHtml(t('review.online.none'))}</div>`}
+            ${clues.length ? `<details class="plain-details" style="margin-top:10px"><summary>${escapeHtml(tf('review.clues.summary', clues.length))}</summary>
+                <div class="body">${clues.map(s => `<div>${linkOrText(s.url, s.title || s.url || t('review.clue'))}</div>`).join('')}</div></details>` : ''}
+        </section>`;
+    }
+
+    function renderLlm(item) {
+        const llm = item.llmSuggestion;
+        if (!llm) return '';
+        const head = llm.choiceIndex > 0
+            ? escapeHtml(t('review.llm.suggest')) + ' <strong>' + escapeHtml(llm.suggestedTitle || '') + '</strong>'
+            : '<strong>' + escapeHtml(t('review.llm.none')) + '</strong>';
+        return `<section class="sec">
+            <div class="sec-head"><span class="sec-title">${escapeHtml(t('review.llm.section'))}</span>
+                <span class="sec-meta">${escapeHtml(tf('review.llm.model', llm.model || '', llm.provider || ''))}</span></div>
+            <div class="llm-box">
+                <div>${head}${llm.unreleasedCompilation ? ' · <strong>' + escapeHtml(t('review.llm.unreleased')) + '</strong>' : ''}</div>
+                <div class="sub">${escapeHtml(tf('review.llm.confidence', percent(llm.confidence)))} · ${escapeHtml(llm.applied ? t('review.llm.applied') : t('review.llm.suggestion.only'))}</div>
+                ${llm.reason ? `<div class="sub">${escapeHtml(tf('review.llm.reason', llm.reason))}</div>` : ''}
+                <div class="sub" style="margin-top:6px">${escapeHtml(t('review.llm.note'))}</div>
+            </div>
+        </section>`;
+    }
+
+    function renderFiles(item) {
+        const files = item.files || [];
+        const rows = files.map(f => `<tr>
+            <td>${escapeHtml(f.fileName || '')}</td>
+            <td>${escapeHtml(f.title || '')}</td>
+            <td>${escapeHtml(f.artist || '')}</td>
+            <td class="mono-s">${f.duration == null ? '-' : formatDuration(f.duration)}</td>
+        </tr>`).join('');
+        return `<section class="sec">
+            <details class="plain-details" ${files.length <= 12 ? 'open' : ''}>
+                <summary><span class="sec-title" style="color:var(--text)">${escapeHtml(tf('review.section.files', files.length))}</span></summary>
+                <div class="table-wrap" style="margin-top:10px"><table class="table">
+                    <thead><tr><th>${escapeHtml(t('review.table.filename'))}</th><th>${escapeHtml(t('review.table.track'))}</th><th>${escapeHtml(t('review.table.artist'))}</th><th>${escapeHtml(t('review.table.length'))}</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table></div>
+            </details>
+        </section>`;
+    }
+
+    // ==================== 决策条 ====================
+    /**
+     * 主按钮只有一个，而且永远说清楚它会对谁做什么：
+     * 选中候选 → 确认它；没选中 → 执行系统建议的下一步；都没有 → 提示先选。
+     */
+    function primaryAction(item) {
+        const s = item.systemSuggestion || {};
+        const sel = selectedCandidate();
+        if (state.selection && sel) {
+            return state.selection.type === 'local'
+                ? { act: 'confirm-local', label: t('review.action.confirm.selected'), cls: 'primary' }
+                : { act: 'confirm-online', label: t('review.action.confirm.online.selected'), cls: 'primary' };
+        }
+        if (s.primaryAction === 'EXPAND' && !item.candidatesExpanded) return { act: 'expand', label: t('review.suggestion.action.expand'), cls: 'primary' };
+        if (s.primaryAction === 'ONLINE_SEARCH') return { act: 'search', label: t('review.suggestion.action.search'), cls: 'primary' };
+        if (s.primaryAction === 'ARCHIVE') return { act: 'archive', label: t('review.action.archive.recommended'), cls: 'primary' };
+        return { act: null, label: t('review.action.select.first'), cls: 'primary' };
+    }
+
+    function renderDecision() {
+        const bar = $('decision');
+        const item = state.item;
+        if (!item || (item.status !== 'PENDING_REVIEW' && item.status !== 'REJECTED')) {
+            bar.hidden = true;
+            return;
+        }
+        bar.hidden = false;
+        const busy = state.busy[item.id];
+
+        if (item.status === 'REJECTED') {
+            bar.innerHTML = `<div class="decision-status">${busy ? busyHtml(busy) : `<span class="muted">${escapeHtml(t('review.status.rejected'))}</span>`}</div>
+                <div class="decision-actions"><span class="primary-slot"><button class="btn primary" data-act="unreject" ${busy ? 'disabled' : ''}>${escapeHtml(t('review.action.unreject'))}</button></span></div>`;
+            return;
+        }
+
+        const s = item.systemSuggestion || {};
+        const primary = primaryAction(item);
+        const sel = selectedCandidate();
+        let status;
+        if (busy) status = busyHtml(busy);
+        else if (sel) status = `<span class="k">${escapeHtml(t('review.selected'))}</span><span class="v" title="${escapeHtml(state.selection.type === 'local' ? candidateLabel(sel) : onlineLabel(sel))}">${escapeHtml(state.selection.type === 'local' ? candidateLabel(sel) : onlineLabel(sel))}</span>`;
+        else status = `<span class="muted">${escapeHtml(t('review.selected.none'))}</span>`;
+
+        const showSearch = primary.act !== 'search';
+        const menuItems = [
+            item.llmJudgeEnabled ? `<button class="menu-item" data-act="llm" ${s.hasReleaseLevelCandidate ? '' : 'disabled'}>
+                <span class="mi-t">${escapeHtml(t('review.action.llm.choose'))}</span><span class="mi-d">${escapeHtml(t('review.menu.llm.desc'))}</span></button>` : '',
+            primary.act === 'archive' ? '' : `<button class="menu-item" data-act="archive">
+                <span class="mi-t">${escapeHtml(t('review.action.archive'))}</span><span class="mi-d">${escapeHtml(stripBullet(t('review.action.hint.archive')))}</span></button>`,
+            `<button class="menu-item danger" data-act="reject">
+                <span class="mi-t">${escapeHtml(t('review.action.reject'))}</span><span class="mi-d">${escapeHtml(stripBullet(t('review.action.hint.reject')))}</span></button>`
+        ].join('');
+
+        bar.innerHTML = `<div class="decision-status">${status}</div>
+            <div class="decision-actions">
+                <div class="menu-wrap">
+                    <button class="btn ghost" data-act="menu" title="${escapeHtml(t('review.action.more'))}" aria-label="${escapeHtml(t('review.action.more'))}" aria-haspopup="menu" aria-expanded="${state.menuOpen}" ${busy ? 'disabled' : ''}>${ICON.dots}<span>${escapeHtml(t('review.action.more'))}</span></button>
+                    <div class="menu ${state.menuOpen && !busy ? 'show' : ''}" role="menu">${menuItems}</div>
+                </div>
+                ${showSearch ? `<button class="btn ghost" data-act="search" title="${escapeHtml(t('review.action.online.search'))}" aria-label="${escapeHtml(t('review.action.online.search'))}" ${busy ? 'disabled' : ''}>${ICON.search}<span>${escapeHtml(t('review.action.online.search'))}</span></button>` : ''}
+                <span class="primary-slot"><button class="btn ${primary.cls}" ${primary.act ? `data-act="${primary.act}"` : 'disabled'} ${busy ? 'disabled' : ''}>
+                    ${busy && busy.key === primary.act ? '<span class="spinner"></span>' : ''}${escapeHtml(primary.label)}</button></span>
+            </div>`;
+    }
+
+    function busyHtml(busy) {
+        const sec = Math.max(0, Math.round((Date.now() - busy.start) / 1000));
+        const long = busy.key === 'search' || busy.key === 'llm' || busy.key === 'expand';
+        return `<span class="spinner" aria-hidden="true"></span><span style="min-width:0">
+            <span class="busy-label">${escapeHtml(busy.label)}</span> <span class="busy-sub" data-elapsed>${escapeHtml(tf('review.busy.elapsed', sec))}</span>
+            ${long ? `<div class="busy-sub">${escapeHtml(t('review.busy.background'))}</div>` : ''}</span>`;
+    }
+
+    // 进行中的操作每秒刷新耗时，让用户知道没卡死
+    setInterval(() => {
+        const busy = state.item && state.busy[state.item.id];
+        const el = document.querySelector('#decision [data-elapsed]');
+        if (busy && el) el.textContent = tf('review.busy.elapsed', Math.round((Date.now() - busy.start) / 1000));
+    }, 1000);
+
+    function stripBullet(s) { return String(s || '').replace(/^\s*[·•]\s*/, ''); }
+
+    // ==================== 操作 ====================
+    const BUSY_LABEL = {
+        expand: 'review.busy.expand', search: 'review.busy.search', llm: 'review.busy.llm',
+        'confirm-local': 'review.busy.confirm', 'confirm-online': 'review.busy.confirm',
+        archive: 'review.busy.archive', reject: 'review.busy.reject', unreject: 'review.busy.unreject'
+    };
+
+    /**
+     * 统一执行入口：锁住该条目的操作、显示进度、把结果落成持续可见的反馈。
+     * 成功处置（状态离开当前过滤条件）后自动跳到下一条。
+     */
+    async function runAction(key, path, body, { onError } = {}) {
+        const id = body.id;
+        const before = state.items.find(i => i.id === id) || state.item;
+        const folderName = before ? before.folderName : '';
+        const beforeStatus = before ? before.status : null;
+        delete state.alerts[id];
+        state.busy[id] = { key, label: t(BUSY_LABEL[key] || 'review.loading'), start: Date.now() };
+        state.menuOpen = false;
+        if (state.currentId === id) renderDetail();
+        renderList();
+        let data;
+        try {
+            data = await api(path, { method: 'POST', body: JSON.stringify(body) });
+        } catch (e) {
+            delete state.busy[id];
+            renderList();
+            if (onError && onError(e)) { if (state.currentId === id) renderDecision(); return; }
+            state.alerts[id] = { tone: 'err', text: tf('review.action.failed', humanError(e.message)) };
+            if (state.currentId === id) renderDetail();
+            else toast(folderName + ' — ' + tf('review.action.failed', humanError(e.message)));
+            return;
+        }
+        delete state.busy[id];
+        const item = data.item;
+        const filter = $('statusFilter').value;
+        const resolvedOut = item && item.status !== beforeStatus && filter !== 'ALL' && item.status !== filter;
+
+        if (item && item.status === 'PENDING_REVIEW' && key !== 'unreject') {
+            // 仍在待确认：搜索/展开/LLM 正常；确认类操作说明部分失败，必须持续提示
+            if (key === 'llm') {
+                state.alerts[id] = { tone: 'info', text: item.llmSuggestion && !item.llmSuggestion.applied ? t('review.llm.done.suggestion') : t('review.llm.done') };
+            } else if (key === 'search') {
+                state.alerts[id] = { tone: 'info', text: (item.onlineCandidates || []).length ? tf('review.search.done', item.onlineCandidates.length) : t('review.online.none') };
+            } else if (key === 'expand') {
+                state.alerts[id] = { tone: 'info', text: t('review.expand.done') };
+            } else {
+                state.alerts[id] = { tone: 'warn', text: tf('review.partial.success', item.resolutionNote || '') };
+            }
+        }
+
+        if (resolvedOut) {
+            await advanceAfter(id, { folderName, status: item.status, note: item.resolutionNote });
+            return;
+        }
+        if (item && item.status !== beforeStatus) {
+            state.flash = { folderName, status: item.status, note: item.resolutionNote };
+        }
+        await loadList();
+        if (state.currentId === id && item) setItem(item, { resetSelection: item.status !== beforeStatus });
+        else if (state.alerts[id]) toast(folderName + ' — ' + state.alerts[id].text);
+    }
+
+    /** 处置完成后：留在原位置的下一条；队列空了就显示「已清空」 */
+    async function advanceAfter(id, flash) {
+        const oldIndex = state.items.findIndex(i => i.id === id);
+        const wasCurrent = state.currentId === id;
+        await loadList();
+        if (!wasCurrent) {
+            toast(tf('review.done.' + flash.status, flash.folderName || ''));
+            return;
+        }
+        const next = state.items[Math.min(Math.max(oldIndex, 0), state.items.length - 1)];
+        if (next) {
+            state.flash = { ...flash, next: true };
+            state.currentId = null;
+            await openItem(next.id, { keepFlash: true });
+        } else {
+            state.flash = { ...flash, cleared: true };
+            state.currentId = null;
+            state.item = null;
+            state.selection = null;
+            renderBlank();
+        }
+    }
+
+    async function doConfirmLocal() {
+        const item = state.item, c = selectedCandidate();
+        if (!item || !c || state.selection.type !== 'local') return;
+        const ok = await ask({
+            title: t('review.dialog.confirm.title'),
+            facts: [[t('review.dialog.release'), candidateLabel(c)], [t('review.dialog.folder'), item.folderName], [t('review.dialog.files'), String(item.fileCount || (item.files || []).length)]],
+            body: [t('review.confirm.candidate'), stripBullet(t('review.action.hint.confirm'))],
+            warn: c.durationSimilarity != null && c.durationSimilarity < 0.85 ? tf('review.dialog.low.similarity', (c.durationSimilarity * 100).toFixed(1) + '%') : '',
+            okText: t('review.online.submit')
+        });
+        if (!ok) return;
+        await runAction('confirm-local', '/api/review/confirm', { id: item.id, releaseId: c.releaseId, releaseGroupId: c.releaseGroupId || '' });
+    }
+
+    async function doArchive() {
+        const item = state.item;
+        if (!item) return;
+        const s = item.systemSuggestion || {};
+        const recommended = s.primaryAction === 'ARCHIVE';
+        const ok = await ask({
+            title: t('review.dialog.archive.title'),
+            facts: [[t('review.fact.synth.title'), item.synthesizedAlbumTitle || '-'], [t('review.fact.synth.artist'), item.synthesizedAlbumArtist || '-'], [t('review.dialog.files'), String(item.fileCount || (item.files || []).length)]],
+            body: [recommended ? t('review.archive.confirm.recommended') : t('review.archive.confirm')],
+            warn: s.neverSearchedOnline === true ? t('review.archive.confirm.never.searched') : '',
+            okText: t('review.action.archive'),
+            danger: true
+        });
+        if (!ok) return;
+        await runAction('archive', '/api/review/archive', { id: item.id });
+    }
+
+    async function doUnreject() {
+        const item = state.item;
+        if (!item) return;
+        const ok = await ask({
+            title: t('review.action.unreject'),
+            facts: [[t('review.dialog.folder'), item.folderName]],
+            body: [t('review.unreject.confirm')],
+            okText: t('review.action.unreject')
+        });
+        if (!ok) return;
+        await runAction('unreject', '/api/review/unreject', { id: item.id });
+    }
+
+    function doReject() {
+        if (!state.item) return;
+        $('rejectNote').value = '';
+        openOverlay('rejectDialog');
+        setTimeout(() => $('rejectNote').focus(), 30);
+    }
+
+    async function submitReject() {
+        const item = state.item;
+        if (!item) return;
+        const note = $('rejectNote').value;
+        closeOverlay('rejectDialog');
+        await runAction('reject', '/api/review/reject', { id: item.id, note });
+    }
+
+    function doSearch() {
+        const item = state.item;
+        if (!item || state.busy[item.id]) return;
+        return runAction('search', '/api/review/online-search', { id: item.id, analyzeCover: false });
+    }
+
+    function doExpand() {
+        const item = state.item;
+        if (!item || state.busy[item.id]) return;
+        return runAction('expand', '/api/review/expand', { id: item.id });
+    }
+
+    function doLlm() {
+        const item = state.item;
+        if (!item || state.busy[item.id]) return;
+        return runAction('llm', '/api/review/llm', { id: item.id });
+    }
+
+    // ---------- 通用确认弹窗 ----------
+    let askResolve = null;
+    function ask({ title, facts = [], body = [], warn = '', okText, danger = false }) {
+        $('askTitle').textContent = title;
+        $('askBody').innerHTML = `
+            ${facts.length ? `<dl class="ask-facts">${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>` : ''}
+            <div class="ask-body">${body.filter(Boolean).map(p => `<p>${escapeHtml(p)}</p>`).join('')}</div>
+            ${warn ? `<div class="ask-warn">${escapeHtml(warn)}</div>` : ''}`;
+        const okBtn = $('askOk');
+        okBtn.textContent = okText || t('review.confirm');
+        okBtn.className = 'btn ' + (danger ? 'danger' : 'primary');
+        openOverlay('askDialog');
+        setTimeout(() => okBtn.focus(), 30);
+        return new Promise(resolve => { askResolve = resolve; });
+    }
+    function settleAsk(value) {
+        closeOverlay('askDialog');
+        const r = askResolve;
+        askResolve = null;
+        if (r) r(value);
+    }
+
+    // ---------- 联网候选确认 ----------
+    let pendingOnline = null; // {itemId, candidateId}
     let pendingCoverSha256 = null;
 
     function formatBytes(value) {
@@ -759,62 +1410,70 @@
 
     function chooseCover(sha) {
         pendingCoverSha256 = sha || null;
-        document.querySelectorAll('#coverChoices .cover-choice').forEach(el =>
-            el.classList.toggle('selected', !!sha && el.dataset.sha === sha));
+        document.querySelectorAll('#coverChoices .cover-choice').forEach(el => {
+            const on = !!sha && el.dataset.sha === sha;
+            el.classList.toggle('selected', on);
+            el.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        $('noCoverBtn').classList.toggle('soft', !sha);
     }
-    function chooseNoCover() { chooseCover(null); }
 
-    async function loadCoverChoices(candidateId) {
-        const box = document.getElementById('coverChoices');
+    async function loadCoverChoices(itemId, candidateId) {
+        const box = $('coverChoices');
         box.innerHTML = `<span class="hint">${escapeHtml(t('review.online.cover.loading'))}</span>`;
         try {
-            const data = await api('/api/review/cover-candidates', {
-                method: 'POST',
-                body: JSON.stringify({ id: currentId, candidateId })
-            });
+            const data = await api('/api/review/cover-candidates', { method: 'POST', body: JSON.stringify({ id: itemId, candidateId }) });
+            if (!pendingOnline || pendingOnline.candidateId !== candidateId) return;
             const rows = data.coverCandidates || [];
-            box.innerHTML = rows.length ? rows.map(c => `<div class="cover-choice" data-sha="${escapeHtml(c.sha256)}" onclick="chooseCover('${escapeHtml(c.sha256)}')">
+            box.innerHTML = rows.length ? rows.map(c => `<button type="button" class="cover-choice" aria-pressed="false" data-sha="${escapeHtml(c.sha256)}">
                 <img loading="lazy" src="/api/cover?candidateSha256=${encodeURIComponent(c.sha256)}" alt="">
                 <div class="cover-meta"><strong>${escapeHtml(t('review.online.cover.origin.' + c.origin))}</strong>${c.originLabel ? ' · ' + escapeHtml(c.originLabel) : ''}<br>${c.width}×${c.height} · ${formatBytes(c.bytes)}</div>
-            </div>`).join('') : `<span class="hint">${escapeHtml(t('review.online.cover.empty'))}</span>`;
+            </button>`).join('') : `<span class="hint">${escapeHtml(t('review.online.cover.empty'))}</span>`;
+            // 不默认选中：只有人工点选的封面才会嵌入（review.online.cover.note）
         } catch (e) {
             box.innerHTML = `<span class="hint">${escapeHtml(humanError(e.message))}</span>`;
         }
     }
 
-    function confirmOnline(candidateId, title, artist, releaseDate, edition) {
-        if (!currentId) return;
-        pendingOnlineCandidateId = candidateId;
+    function doConfirmOnline() {
+        const item = state.item, c = selectedCandidate();
+        if (!item || !c || state.selection.type !== 'online') return;
+        pendingOnline = { itemId: item.id, candidateId: c.id };
         pendingCoverSha256 = null;
-        document.getElementById('ocTitle').value = title || '';
-        document.getElementById('ocArtist').value = artist || '';
-        document.getElementById('ocDate').value = releaseDate || '';
-        document.getElementById('ocEdition').value = edition || '';
-        document.getElementById('ocDir').value = '';
-        document.getElementById('onlineDialog').classList.add('show');
-        loadCoverChoices(candidateId);
+        $('ocTitle').value = c.title || '';
+        $('ocArtist').value = c.albumArtist || c.artist || '';
+        $('ocDate').value = c.releaseDate || '';
+        $('ocEdition').value = c.edition || '';
+        $('ocDir').value = '';
+        $('onlineError').style.display = 'none';
+        chooseCover(null);
+        openOverlay('onlineDialog');
+        loadCoverChoices(item.id, c.id);
     }
 
     function closeOnlineDialog() {
-        document.getElementById('onlineDialog').classList.remove('show');
-        pendingOnlineCandidateId = null;
+        closeOverlay('onlineDialog');
+        pendingOnline = null;
         pendingCoverSha256 = null;
     }
 
     async function submitOnlineConfirm() {
-        if (!currentId || pendingOnlineCandidateId === null) return;
+        if (!pendingOnline) return;
         const payload = {
-            id: currentId,
-            candidateId: pendingOnlineCandidateId,
-            albumTitle: document.getElementById('ocTitle').value.trim(),
-            albumArtist: document.getElementById('ocArtist').value.trim(),
-            releaseDate: document.getElementById('ocDate').value.trim(),
-            edition: document.getElementById('ocEdition').value.trim(),
-            archiveDirectoryName: document.getElementById('ocDir').value.trim(),
+            id: pendingOnline.itemId,
+            candidateId: pendingOnline.candidateId,
+            albumTitle: $('ocTitle').value.trim(),
+            albumArtist: $('ocArtist').value.trim(),
+            releaseDate: $('ocDate').value.trim(),
+            edition: $('ocEdition').value.trim(),
+            archiveDirectoryName: $('ocDir').value.trim(),
             selectedCoverSha256: pendingCoverSha256
         };
         if (!payload.albumTitle) {
-            toast(t('review.album.title.required'));
+            const err = $('onlineError');
+            err.textContent = t('review.album.title.required');
+            err.style.display = 'block';
+            $('ocTitle').focus();
             return;
         }
         closeOnlineDialog();
@@ -824,138 +1483,170 @@
     let pendingDuplicatePayload = null;
 
     async function submitOnlinePayload(payload) {
-        await runAction('/api/review/online-confirm', payload, e => {
-            if (e.message !== 'online.duplicate.exists' || !e.data || !Array.isArray(e.data.duplicates)) return false;
-            showDuplicateDialog(payload, e.data.duplicates);
-            return true;
+        await runAction('confirm-online', '/api/review/online-confirm', payload, {
+            onError: e => {
+                if (e.message !== 'online.duplicate.exists' || !e.data || !Array.isArray(e.data.duplicates)) return false;
+                showDuplicateDialog(payload, e.data.duplicates);
+                return true;
+            }
         });
     }
 
     function showDuplicateDialog(payload, duplicates) {
         pendingDuplicatePayload = payload;
-        document.getElementById('duplicateList').innerHTML = duplicates.map(d => `
+        $('duplicateList').innerHTML = duplicates.map(d => `
             <div>
-                <div><strong>${escapeHtml(d.path)}</strong></div>
+                <div style="font-family:var(--mono);font-size:12px;overflow-wrap:anywhere"><strong>${escapeHtml(d.path)}</strong></div>
                 <div class="hint">${escapeHtml(tf('review.duplicate.matched', d.matched, d.total))} ·
                     ${escapeHtml(d.replaceable ? t('review.duplicate.replaceable') : t('review.duplicate.kept'))}</div>
             </div>`).join('');
-        document.getElementById('duplicateReplaceBtn').disabled = !duplicates.some(d => d.replaceable);
-        document.getElementById('duplicateDialog').classList.add('show');
+        $('duplicateReplaceBtn').disabled = !duplicates.some(d => d.replaceable);
+        openOverlay('duplicateDialog');
     }
 
     async function resolveDuplicate(policy) {
-        document.getElementById('duplicateDialog').classList.remove('show');
+        closeOverlay('duplicateDialog');
         const payload = pendingDuplicatePayload;
         pendingDuplicatePayload = null;
         if (!policy || !payload) return;
-        await runAction('/api/review/online-confirm', { ...payload, duplicatePolicy: policy });
+        await runAction('confirm-online', '/api/review/online-confirm', { ...payload, duplicatePolicy: policy });
     }
 
-    async function confirmCandidate(releaseId, releaseGroupId) {
-        if (!currentId) return;
-        if (!confirm(t('review.confirm.candidate'))) return;
-        await runAction('/api/review/confirm', { id: currentId, releaseId, releaseGroupId });
+    // ---------- 弹层 ----------
+    let lastFocus = null;
+    function openOverlay(id) {
+        lastFocus = document.activeElement;
+        $(id).classList.add('show');
+    }
+    function closeOverlay(id) {
+        $(id).classList.remove('show');
+        if (lastFocus && document.body.contains(lastFocus)) lastFocus.focus();
+    }
+    /** 各弹层统一的「取消」：保证挂起的 Promise / 暂存的 payload 都被清理 */
+    function cancelOverlay(id) {
+        if (id === 'askDialog') settleAsk(false);
+        else if (id === 'onlineDialog') closeOnlineDialog();
+        else if (id === 'duplicateDialog') resolveDuplicate(null);
+        else closeOverlay(id);
     }
 
-    async function llmJudge() {
-        if (!currentId) return;
-        // 会先从 MusicBrainz 展开版本明细再调用模型，可能需要十几秒
-        toast(t('review.llm.running'));
-        await runAction('/api/review/llm', { id: currentId });
-    }
+    // ==================== 事件 ====================
+    const ACTIONS = {
+        refresh: async () => {
+            const btn = $('refreshBtn');
+            btn.disabled = true;
+            await loadList();
+            if (state.currentId) await openItem(state.currentId, { keepFlash: true });
+            btn.disabled = false;
+        },
+        back: () => { $('desk').dataset.view = 'queue'; window.scrollTo(0, 0); },
+        'dismiss-flash': () => { state.flash = null; state.item ? renderDetail() : renderBlank(); },
+        'dismiss-alert': () => { if (state.item) { delete state.alerts[state.item.id]; renderDetail(); } },
+        menu: () => { state.menuOpen = !state.menuOpen; renderDecision(); },
+        expand: doExpand,
+        search: doSearch,
+        llm: doLlm,
+        archive: doArchive,
+        reject: doReject,
+        unreject: doUnreject,
+        'confirm-local': doConfirmLocal,
+        'confirm-online': doConfirmOnline
+    };
 
-    async function onlineSearch() {
-        if (!currentId || onlineSearchRunning) return;
-        onlineSearchRunning = true;
-        const button = document.getElementById('onlineSearchBtn');
-        if (button) button.disabled = true;
-        toast(t('review.online.search.running'));
-        try {
-            await runAction('/api/review/online-search', { id: currentId, analyzeCover: false });
-        } finally {
-            onlineSearchRunning = false;
-            const currentButton = document.getElementById('onlineSearchBtn');
-            if (currentButton) currentButton.disabled = false;
+    document.addEventListener('click', e => {
+        const tab = e.target.closest('#kindTabs .kind-tab');
+        if (tab) return switchKind(tab.dataset.kind);
+        const open = e.target.closest('[data-open]');
+        if (open) return openItem(open.dataset.open);
+        const sel = e.target.closest('[data-select]');
+        if (sel && !e.target.closest('a')) return select(sel.dataset.select, sel.dataset.key);
+        const cover = e.target.closest('.cover-choice');
+        if (cover) return chooseCover(cover.dataset.sha);
+        const askBtn = e.target.closest('[data-ask]');
+        if (askBtn) return settleAsk(askBtn.dataset.ask === 'ok');
+        const dup = e.target.closest('[data-dup]');
+        if (dup) return resolveDuplicate(dup.dataset.dup || null);
+        const close = e.target.closest('[data-close]');
+        if (close) return close.dataset.close === 'online' ? closeOnlineDialog() : closeOverlay('rejectDialog');
+        const act = e.target.closest('[data-act]');
+        if (act && !act.disabled && ACTIONS[act.dataset.act]) {
+            if (act.dataset.act !== 'menu') state.menuOpen = false;
+            return ACTIONS[act.dataset.act]();
         }
-    }
+        if (state.menuOpen && !e.target.closest('.menu-wrap')) { state.menuOpen = false; renderDecision(); }
+    });
 
-    async function archiveItem(recommended) {
-        if (!currentId) return;
-        const suggestion = currentItem && currentItem.systemSuggestion ? currentItem.systemSuggestion : {};
-        let message = recommended || suggestion.primaryAction === 'ARCHIVE'
-            ? t('review.archive.confirm.recommended') : t('review.archive.confirm');
-        if (suggestion.neverSearchedOnline === true) {
-            message += '\n\n' + t('review.archive.confirm.never.searched');
+    $('noCoverBtn').addEventListener('click', () => chooseCover(null));
+    $('onlineSubmit').addEventListener('click', submitOnlineConfirm);
+    $('rejectSubmit').addEventListener('click', submitReject);
+    $('rejectNote').addEventListener('keydown', e => { if (e.key === 'Enter') submitReject(); });
+    $('statusFilter').addEventListener('change', () => { state.flash = null; closeDetail(); loadList({ autoOpen: !isNarrow() }); });
+
+    document.querySelectorAll('.overlay').forEach(el => {
+        el.addEventListener('mousedown', e => { if (e.target === el) cancelOverlay(el.id); });
+    });
+
+    document.addEventListener('keydown', e => {
+        const openOverlayEl = document.querySelector('.overlay.show');
+        if (e.key === 'Escape') {
+            if (openOverlayEl) return cancelOverlay(openOverlayEl.id);
+            if (state.menuOpen) { state.menuOpen = false; renderDecision(); }
+            return;
         }
-        if (!confirm(message)) return;
-        await runAction('/api/review/archive', { id: currentId });
-    }
-
-    async function unrejectItem() {
-        if (!currentId) return;
-        if (!confirm(t('review.unreject.confirm'))) return;
-        await runAction('/api/review/unreject', { id: currentId });
-    }
-
-    function rejectItem() {
-        if (!currentId) return;
-        document.getElementById('rejectNote').value = '';
-        document.getElementById('rejectDialog').classList.add('show');
-    }
-
-    function closeRejectDialog() {
-        document.getElementById('rejectDialog').classList.remove('show');
-    }
-
-    async function submitReject() {
-        if (!currentId) return;
-        const note = document.getElementById('rejectNote').value;
-        closeRejectDialog();
-        await runAction('/api/review/reject', { id: currentId, note });
-    }
-
-    async function runAction(path, body, onError) {
-        try {
-            const data = await api(path, { method: 'POST', body: JSON.stringify(body) });
-            // 部分失败时后端会把条目保留在 PENDING_REVIEW，不能报「成功」
-            if (data.item && data.item.status === 'PENDING_REVIEW' && path !== '/api/review/unreject') {
-                if (data.item.llmSuggestion && !data.item.llmSuggestion.applied
-                    && path === '/api/review/llm') {
-                    toast(t('review.llm.done.suggestion'));
-                } else if (path === '/api/review/llm') {
-                    toast(t('review.llm.done'));
-                } else {
-                    toast(tf('review.partial.success', data.item.resolutionNote || ''));
-                }
-            } else {
-                toast(t('review.action.success'));
-            }
-            renderDetail(data.item);
-            loadList();
-        } catch (e) {
-            if (onError && onError(e)) return;
-            toast(tf('review.action.failed', humanError(e.message)));
+        if (openOverlayEl || e.metaKey || e.ctrlKey || e.altKey) return;
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+        // 候选行：空格 / 回车选择
+        const sel = e.target.closest && e.target.closest('[data-select]');
+        if (sel && (e.key === ' ' || e.key === 'Enter')) {
+            e.preventDefault();
+            const key = sel.dataset.key, type = sel.dataset.select;
+            select(type, key);
+            const again = document.querySelector(`[data-select="${type}"][data-key="${CSS.escape(key)}"]`);
+            if (again) again.focus();
+            return;
         }
-    }
+        if (e.key === 'j' || e.key === 'J') { e.preventDefault(); moveSelection(1); }
+        else if (e.key === 'k' || e.key === 'K') { e.preventDefault(); moveSelection(-1); }
+    });
 
+    // ==================== 工具 ====================
+    // 注意 Number(null) === 0：没有分数时必须显示为「无」，不能显示成 0%
     function validScore(value) {
-        return Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1;
+        if (value === null || value === undefined || value === '') return false;
+        const n = Number(value);
+        return Number.isFinite(n) && n >= 0 && n <= 1;
     }
 
     function percent(value) {
-        const n = Number(value);
-        if (!Number.isFinite(n)) return '-';
-        return (Math.max(0, Math.min(1, n)) * 100).toFixed(0) + '%';
+        if (!validScore(value)) return '-';
+        return (Number(value) * 100).toFixed(0) + '%';
     }
 
-    function baseName(path) {
-        return String(path || '').split(/[\\/]/).pop() || '';
-    }
+    function clampPct(v) { return Math.max(0, Math.min(100, Number(v) * 100)).toFixed(0); }
+
+    function baseName(path) { return String(path || '').split(/[\\/]/).pop() || ''; }
 
     function formatDuration(seconds) {
         const m = Math.floor(seconds / 60);
-        const s = seconds % 60;
+        const s = Math.round(seconds % 60);
         return m + ':' + String(s).padStart(2, '0');
+    }
+
+    function ago(ms) {
+        if (!ms) return '';
+        try {
+            const rtf = new Intl.RelativeTimeFormat(I18n.language === 'zh_CN' ? 'zh-CN' : 'en', { numeric: 'auto' });
+            const sec = Math.round((ms - Date.now()) / 1000);
+            const abs = Math.abs(sec);
+            if (abs < 60) return rtf.format(sec, 'second');
+            if (abs < 3600) return rtf.format(Math.round(sec / 60), 'minute');
+            if (abs < 86400) return rtf.format(Math.round(sec / 3600), 'hour');
+            if (abs < 86400 * 30) return rtf.format(Math.round(sec / 86400), 'day');
+            return new Date(ms).toLocaleDateString();
+        } catch (e) {
+            return new Date(ms).toLocaleDateString();
+        }
     }
 
     function escapeHtml(text) {
@@ -976,21 +1667,6 @@
         const text = escapeHtml(label || url || t('review.source'));
         return href ? `<a href="${href}" target="_blank" rel="noopener">${text}</a>` : text;
     }
-
-    // ESC 关闭任意弹窗
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeOnlineDialog();
-            closeRejectDialog();
-        }
-    });
-
-    // 点击遮罩层空白处关闭
-    document.querySelectorAll('.overlay').forEach(el => {
-        el.addEventListener('mousedown', (e) => {
-            if (e.target === el) el.classList.remove('show');
-        });
-    });
 
     init();
 </script>
