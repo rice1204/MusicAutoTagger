@@ -32,21 +32,45 @@
             overflow: hidden;
         }
         .queue-top { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
-        .kind-tabs { display: flex; gap: 2px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
-        .kind-tab {
-            flex: 1 1 0; min-width: 0;
-            background: none; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer;
-            font: inherit; font-size: 13px; font-weight: 600; color: var(--text-soft);
-            display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+        .queue-search { position: relative; display: flex; align-items: center; }
+        .queue-search > svg { position: absolute; left: 10px; width: 15px; height: 15px; color: var(--text-mute); pointer-events: none; }
+        .queue-search input {
+            width: 100%; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+            padding: 6px 30px 6px 32px; min-height: 34px; font: inherit; font-size: 13px; color: var(--text); background: #fff;
         }
-        .kind-tab:hover { color: var(--text); }
-        .kind-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
-        .kind-tab .tab-label { overflow: hidden; text-overflow: ellipsis; }
-        .tab-count {
-            min-width: 18px; padding: 0 6px; border-radius: 9px; background: var(--warn-soft); color: var(--warn);
-            font-weight: 700; font-size: 11px; line-height: 18px; text-align: center; display: none; font-variant-numeric: tabular-nums;
+        .queue-search input::placeholder { color: var(--text-mute); }
+        .queue-search input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+        .search-clear {
+            position: absolute; right: 5px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent;
+            color: var(--text-mute); cursor: pointer; display: grid; place-items: center;
         }
-        .tab-count.show { display: inline-block; }
+        .search-clear:hover { background: var(--bg-soft); color: var(--text); }
+        .search-clear[hidden] { display: none; }
+        /* 原因筛选：一眼看出积压是由哪几类原因构成的，点一下只看这一类 */
+        .reason-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .reason-chips:empty { display: none; }
+        .chip {
+            display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 999px;
+            background: #fff; color: var(--text-soft); font: inherit; font-size: 12px; font-weight: 600; line-height: 1;
+            padding: 5px 9px; cursor: pointer; white-space: nowrap; transition: background .14s ease, border-color .14s ease, color .14s ease;
+        }
+        .chip:hover { background: var(--bg-soft); color: var(--text); }
+        .chip .n { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-mute); }
+        .chip.active { background: var(--text); border-color: var(--text); color: #fff; }
+        .chip.active .n { color: rgba(255,255,255,.75); }
+        .chip:focus-visible, .search-clear:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .chip .dot, .why-dot { width: 7px; height: 7px; border-radius: 50%; background: #7a879b; flex: 0 0 auto; }
+        .tone-danger .dot { background: var(--danger); }
+        .tone-warn .dot { background: var(--warn); }
+        .tone-info .dot { background: var(--info); }
+        /* 原因标签：队列行与详情页共用 */
+        .rtag {
+            display: inline-flex; align-items: center; border-radius: 5px; padding: 0 6px; font-size: 11px; font-weight: 700;
+            line-height: 18px; white-space: nowrap; background: var(--bg-soft); color: var(--text-soft);
+        }
+        .rtag.tone-danger { background: var(--danger-soft); color: var(--danger); }
+        .rtag.tone-warn { background: var(--warn-soft); color: var(--warn); }
+        .rtag.tone-info { background: var(--info-soft); color: var(--info); }
         .queue-filter { display: flex; align-items: center; gap: 8px; }
         .queue-filter select {
             flex: 1; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
@@ -68,6 +92,18 @@
         .q-meta { font-size: 12px; color: var(--text-mute); font-variant-numeric: tabular-nums; }
         .q-reason { font-size: 12px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .q-item.active .q-meta, .q-item.active .q-reason { color: #3c4f72; }
+        .q-tags { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .q-new { font-size: 10.5px; font-weight: 700; color: var(--primary-dark); display: inline-flex; align-items: center; gap: 4px; }
+        .q-new::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+        .q-match { font-size: 12px; color: var(--text-soft); overflow-wrap: anywhere; }
+        .q-match b { font-weight: 600; color: var(--text); }
+        .q-elsewhere {
+            display: block; margin-top: 4px; padding: 10px 12px; border-radius: var(--radius); border: 1px dashed var(--border-strong);
+            font-size: 12.5px; color: var(--text-soft); text-decoration: none; line-height: 1.5;
+        }
+        .q-elsewhere:hover { background: var(--bg-soft); color: var(--text); }
+        .q-elsewhere strong { color: var(--primary-dark); font-weight: 600; }
+        .queue-empty .btn { margin-top: 10px; }
         .signals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
         .signal {
             display: inline-flex; align-items: center; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 600;
@@ -96,7 +132,15 @@
         .d-title h2 { font-size: 18px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; min-width: 0; flex: 0 1 auto; }
         .d-title .badge { margin-top: 3px; }
         .d-path { font-family: var(--mono); font-size: 11.5px; color: var(--text-mute); margin-top: 4px; overflow-wrap: anywhere; }
-        .d-reason { margin-top: 8px; color: var(--text-soft); font-size: 13.5px; }
+        /* 「为什么没有自动处理」：详情页第一屏必须回答的问题 */
+        .why { margin-top: 14px; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border); border-left-width: 3px; background: var(--bg-soft); }
+        .why.tone-danger { border-left-color: var(--danger); }
+        .why.tone-warn { border-left-color: var(--warn); }
+        .why.tone-info { border-left-color: var(--info); }
+        .why-k { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-mute); }
+        .why-title { margin-top: 6px; font-size: 14.5px; font-weight: 700; line-height: 1.45; }
+        .why-detail { margin-top: 3px; font-size: 13px; color: var(--text-soft); line-height: 1.6; overflow-wrap: anywhere; }
+        .why-next { margin-top: 6px; font-size: 13px; line-height: 1.6; }
         .d-facts { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 12px; font-size: 12.5px; }
         .d-facts div { display: flex; gap: 6px; min-width: 0; }
         .d-facts dt { color: var(--text-mute); white-space: nowrap; }
@@ -364,12 +408,12 @@
         <section class="card queue" aria-labelledby="queueTitle">
             <div class="queue-top">
                 <span id="queueTitle" class="sr-only" data-i18n="review.queue" hidden>队列</span>
-                <div class="kind-tabs" id="kindTabs" role="tablist">
-                    <button class="kind-tab" role="tab" data-kind="ALBUM_UNRESOLVED">
-                        <span class="tab-label" data-i18n="review.tab.album">专辑待确认</span><span class="tab-count" id="tabCountAlbum"></span>
-                    </button>
-                    <button class="kind-tab" role="tab" data-kind="TRACKS_MISSING">
-                        <span class="tab-label" data-i18n="review.tab.missing">锁定专辑缺曲</span><span class="tab-count" id="tabCountMissing"></span>
+                <div class="queue-search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                    <input id="searchInput" type="text" autocomplete="off" spellcheck="false" enterkeyhint="search"
+                           placeholder="搜索文件夹、文件名或曲名" data-i18n-placeholder="review.search.placeholder" aria-label="搜索">
+                    <button type="button" class="search-clear" id="searchClear" hidden aria-label="清除">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
                 </div>
                 <div class="queue-filter">
@@ -381,9 +425,10 @@
                         <option value="REJECTED" id="rejectedOption" data-i18n="review.filter.rejected">已忽略</option>
                     </select>
                 </div>
+                <div class="reason-chips" id="reasonChips" role="group"></div>
             </div>
             <div class="queue-list" id="list" role="listbox"><div class="queue-empty" data-i18n="review.loading">加载中...</div></div>
-            <div class="queue-foot"><kbd>J</kbd><kbd>K</kbd><span data-i18n="review.queue.keys">切换条目</span></div>
+            <div class="queue-foot"><kbd>J</kbd><kbd>K</kbd><span data-i18n="review.queue.keys">切换条目</span><kbd style="margin-left:8px">/</kbd><span data-i18n="review.queue.keys.search">搜索</span></div>
         </section>
 
         <section class="card detail" id="detailCard" aria-live="polite">
@@ -510,8 +555,13 @@
     // ==================== 状态 ====================
     const state = {
         csrf: null,
-        kind: location.hash === '#missing' ? 'TRACKS_MISSING' : (location.hash === '#album' ? 'ALBUM_UNRESOLVED' : null),
-        items: [],          // 当前 Tab + 过滤条件下的列表
+        reason: null,       // 原因筛选（reasonCode）；null = 全部
+        query: '',          // 搜索词
+        all: [],            // 当前状态 + 搜索词下的全部条目（原因筛选的计数基于它）
+        items: [],          // all 再按原因筛选后的列表
+        listSeq: 0,         // 丢弃过期的列表响应（连续输入搜索词时）
+        seenBefore: 0,      // 上次访问本页的时间；之后入队的条目标「新」
+        recoveryItems: null,// 「重新识别」页的条目，搜索时顺带提示（懒加载）
         currentId: null,
         item: null,         // 当前详情
         selection: null,    // {type:'local', releaseId, releaseGroupId} | {type:'online', id}
@@ -539,9 +589,58 @@
             toast(t('review.auth.failed') + ': ' + e.message);
             return;
         }
+        initSeen();
+        const link = parseHash();
+        if (link.query) {
+            state.query = link.query;
+            $('searchInput').value = link.query;
+            $('searchClear').hidden = false;
+        }
+        state.reason = link.reason;
         renderBlank();
-        await loadList({ autoOpen: !isNarrow() });
+        if (link.itemId) {
+            await openLinked(link.itemId);
+        } else {
+            await loadList({ autoOpen: !isNarrow() });
+        }
     }
+
+    /** #item=<id> 直达某一条；#q=<词> 带搜索词进入；#missing 兼容旧的缺曲入口 */
+    function parseHash() {
+        const raw = location.hash.replace(/^#/, '');
+        if (raw === 'missing') return { reason: 'TRACKS_MISSING' };
+        const params = new URLSearchParams(raw);
+        return { reason: null, itemId: params.get('item'), query: (params.get('q') || '').trim() };
+    }
+
+    /**
+     * 从概览 / 链接直达某一条：条目可能已经被处置（不在「待确认」里），
+     * 那就切到「全部」再打开，而不是给用户一个空白页。
+     */
+    async function openLinked(id) {
+        await loadList();
+        if (!state.all.some(i => i.id === id) && $('statusFilter').value !== 'ALL') {
+            $('statusFilter').value = 'ALL';
+            await loadList();
+        }
+        await openItem(id);
+        const el = document.querySelector(`#list .q-item[data-open="${CSS.escape(id)}"]`);
+        if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+
+    function syncHash() {
+        const hash = state.currentId ? '#item=' + encodeURIComponent(state.currentId) : '';
+        if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
+    }
+
+    const SEEN_KEY = 'review.lastSeenAt';
+    function initSeen() {
+        try {
+            state.seenBefore = Number(localStorage.getItem(SEEN_KEY)) || 0;
+            localStorage.setItem(SEEN_KEY, String(Date.now()));
+        } catch (e) { state.seenBefore = 0; }
+    }
+    const isNew = item => state.seenBefore > 0 && item.status === 'PENDING_REVIEW' && Number(item.createdAt) > state.seenBefore;
 
     let toastTimer = null;
     function toast(msg) {
@@ -617,8 +716,6 @@
     async function loadStats() {
         try {
             const data = await api('/api/review/stats');
-            setTabCount('tabCountAlbum', data.pendingAlbum || 0);
-            setTabCount('tabCountMissing', data.pendingMissingTracks || 0);
             $('rejectedOption').textContent = tf('review.filter.rejected.count', data.rejected || 0);
             return data;
         } catch (e) {
@@ -626,28 +723,117 @@
         }
     }
 
-    function setTabCount(id, count) {
-        const el = $(id);
-        el.textContent = count > 99 ? '99+' : String(count);
-        el.classList.toggle('show', count > 0);
+    // ---------- 原因 ----------
+    // 顺序即筛选条的显示顺序；值是色调
+    const REASON_TONE = {
+        TRACKS_MISSING: 'danger', NO_DOMINANT_ALBUM: 'warn', VOTE_MISMATCH: 'warn', TRACK_COUNT_UNRELIABLE: 'warn',
+        LOW_CONFIDENCE: 'info', NO_ALBUM_INFO: 'mute', ONLINE_ASSIST: 'info', ALBUM_UNDETERMINED: 'mute'
+    };
+    // 后端新增了本页还不认识的原因时，降级为「专辑未确定」，不能让条目消失或显示 key
+    const reasonCodeOf = item => REASON_TONE[item.reasonCode] ? item.reasonCode : 'ALBUM_UNDETERMINED';
+
+    /**
+     * 把结构化原因渲染成文案。
+     * tag：队列行标签；short：队列行一句话；title / detail / next：详情页的原因卡片。
+     * facts 缺失（旧条目、判定点没给数字）时退回不带数字的说明。
+     */
+    function reasonView(item) {
+        const code = reasonCodeOf(item);
+        const base = 'review.reason.' + code;
+        const f = item.reasonFacts || {};
+        const has = (...keys) => keys.every(k => f[k] !== undefined && f[k] !== null && f[k] !== '');
+        const n = k => Math.round(Number(f[k]));
+        const name = v => (v === undefined || v === null || v === '') ? '-' : String(v);
+        let tag = t(base + '.label'), detail = '', short = '';
+        if (code === 'NO_DOMINANT_ALBUM' && has('coverage', 'threshold', 'bestCount', 'samples', 'albumCount')) {
+            detail = tf(base + '.detail', name(f.bestTitle), n('bestCount'), n('samples'), percent(f.coverage), percent(f.threshold), n('albumCount'));
+            short = tf(base + '.short', percent(f.coverage), n('albumCount'));
+        } else if ((code === 'VOTE_MISMATCH' || code === 'TRACK_COUNT_UNRELIABLE') && has('unmatched', 'total')) {
+            detail = tf(base + '.detail', name(f.albumTitle), n('unmatched'), n('total'));
+            short = tf(base + '.short', name(f.albumTitle), n('unmatched'), n('total'));
+        } else if (code === 'NO_ALBUM_INFO' && has('samples')) {
+            detail = tf(base + '.detail', n('samples'));
+        } else if (code === 'LOW_CONFIDENCE' && has('confidence', 'threshold', 'votes', 'samples')) {
+            detail = tf(base + '.detail', name(f.bestTitle), n('votes'), n('samples'), percent(f.confidence), percent(f.threshold));
+            short = tf(base + '.short', name(f.bestTitle), n('votes'), n('samples'));
+        } else if (code === 'TRACKS_MISSING' && item.missingTracks) {
+            const m = item.missingTracks;
+            const count = Math.max(1, Number(m.unmatchedLocalCount) || 0);
+            tag = tf(base + '.label.count', count);
+            detail = tf(base + '.detail', name(m.albumTitle), m.localTrackCount || '-', m.releaseTrackCount || '-', count);
+            short = tf(base + '.short', name(m.albumTitle));
+        }
+        if (!detail) detail = t(base + '.generic', '');
+        return { code, tone: REASON_TONE[code], tag, short, title: t(base + '.title'), detail, next: t(base + '.next', '') };
     }
 
-    function applyKindTabs() {
-        document.querySelectorAll('#kindTabs .kind-tab').forEach(btn => {
-            const on = btn.dataset.kind === state.kind;
-            btn.classList.toggle('active', on);
-            btn.setAttribute('aria-selected', on ? 'true' : 'false');
-        });
+    function renderChips() {
+        const counts = {};
+        state.all.forEach(item => { const c = reasonCodeOf(item); counts[c] = (counts[c] || 0) + 1; });
+        const codes = Object.keys(REASON_TONE).filter(c => counts[c]);
+        // 只有一种原因时筛选没有意义，不占地方
+        if (codes.length < 2) { $('reasonChips').innerHTML = ''; return; }
+        const chip = (code, label, count) => `<button type="button" class="chip ${code ? 'tone-' + REASON_TONE[code] : ''} ${state.reason === code ? 'active' : ''}"
+            data-reason="${code || ''}" aria-pressed="${state.reason === code}">${code ? '<span class="dot"></span>' : ''}${escapeHtml(label)}<span class="n">${count}</span></button>`;
+        $('reasonChips').innerHTML = chip(null, t('review.reason.all'), state.all.length)
+            + codes.map(c => chip(c, t('review.reason.' + c + '.label'), counts[c])).join('');
     }
 
-    function switchKind(kind) {
-        if (state.kind === kind) return;
-        state.kind = kind;
-        history.replaceState(null, '', kind === 'TRACKS_MISSING' ? '#missing' : '#album');
+    function applyReasonFilter() {
+        // 选中的原因在当前结果里已经没有条目（处理完了 / 换了搜索词）时自动回到「全部」
+        if (state.reason && !state.all.some(i => reasonCodeOf(i) === state.reason)) state.reason = null;
+        state.items = state.reason ? state.all.filter(i => reasonCodeOf(i) === state.reason) : state.all;
+    }
+
+    function setReason(code) {
+        state.reason = code || null;
         state.flash = null;
-        closeDetail();
-        applyKindTabs();
-        loadList({ autoOpen: !isNarrow() });
+        applyReasonFilter();
+        renderChips();
+        renderList();
+        syncSelection();
+    }
+
+    /** 筛选 / 搜索改变后：当前条目不在结果里就换成第一条（窄屏留在队列视图） */
+    function syncSelection() {
+        if (state.currentId && state.items.some(i => i.id === state.currentId)) return markActive();
+        if (state.items.length && !isNarrow()) {
+            state.currentId = null;
+            openItem(state.items[0].id);
+        } else {
+            closeDetail();
+        }
+    }
+
+    let searchTimer = null;
+    function setQuery(value, { immediate = false } = {}) {
+        const q = String(value || '').trim();
+        $('searchClear').hidden = !$('searchInput').value;
+        if (q === state.query) return;
+        state.query = q;
+        state.flash = null;
+        clearTimeout(searchTimer);
+        const run = async () => { await loadList(); syncSelection(); };
+        if (immediate) run(); else searchTimer = setTimeout(run, 220);
+    }
+
+    /** 搜索时顺带看一眼「重新识别」：用户并不知道文件落在了哪个页面 */
+    async function loadRecoveryItems() {
+        if (state.recoveryItems) return state.recoveryItems;
+        try {
+            const data = await api('/api/recovery/list');
+            state.recoveryItems = data.items || [];
+        } catch (e) {
+            return []; // 拿不到就不提示，不影响本页搜索；下次搜索再试
+        }
+        return state.recoveryItems;
+    }
+
+    function recoveryMatches() {
+        const q = state.query.toLowerCase();
+        if (!q || !state.recoveryItems) return [];
+        return state.recoveryItems.filter(i => String(i.name || '').toLowerCase().includes(q)
+            || String(i.relativePath || '').toLowerCase().includes(q));
     }
 
     /**
@@ -655,23 +841,29 @@
      * 用户进来就能直接开始处理，不用先点一下。
      */
     async function loadList({ autoOpen = false } = {}) {
-        const stats = await loadStats();
+        loadStats();
         if (window.Shell) Shell.refreshReviewCount();
-        if (!state.kind) {
-            // 首次进入：哪个 Tab 有待处理就打开哪个，两个都有时优先「专辑待确认」
-            state.kind = stats && !(stats.pendingAlbum > 0) && stats.pendingMissingTracks > 0
-                ? 'TRACKS_MISSING' : 'ALBUM_UNRESOLVED';
-        }
-        applyKindTabs();
         const status = $('statusFilter').value;
+        const query = state.query;
+        const seq = ++state.listSeq;
         const listEl = $('list');
         try {
-            const data = await api('/api/review/list?status=' + encodeURIComponent(status));
-            state.items = (data.items || []).filter(item => (item.kind || 'ALBUM_UNRESOLVED') === state.kind);
+            const [data] = await Promise.all([
+                api('/api/review/list?status=' + encodeURIComponent(status) + (query ? '&q=' + encodeURIComponent(query) : '')),
+                query ? loadRecoveryItems() : null
+            ]);
+            if (seq !== state.listSeq) return state.items; // 已有更新的请求在路上
+            state.all = data.items || [];
         } catch (e) {
+            if (seq !== state.listSeq) return state.items;
+            state.all = [];
+            state.items = [];
+            $('reasonChips').innerHTML = '';
             listEl.innerHTML = `<div class="queue-empty">${escapeHtml(t('review.load.failed'))}: ${escapeHtml(humanError(e.message))}</div>`;
             return [];
         }
+        applyReasonFilter();
+        renderChips();
         renderList();
         if (autoOpen && !state.currentId && state.items.length) {
             openItem(state.items[0].id);
@@ -681,13 +873,26 @@
         return state.items;
     }
 
+    function renderElsewhere() {
+        const hits = recoveryMatches();
+        if (!hits.length) return '';
+        const partial = hits.filter(i => i.sourceType === 'PARTIAL').length;
+        return `<a class="q-elsewhere" href="recovery.html#find=${encodeURIComponent(state.query)}">
+            <strong>${escapeHtml(tf('review.search.elsewhere', hits.length))}</strong><br>
+            ${escapeHtml(tf('review.search.elsewhere.detail', partial, hits.length - partial))}</a>`;
+    }
+
     function renderList() {
         const listEl = $('list');
+        const pendingView = $('statusFilter').value === 'PENDING_REVIEW';
         if (!state.items.length) {
-            listEl.innerHTML = `<div class="queue-empty">${escapeHtml(t('review.no.items'))}</div>`;
+            const empty = state.query
+                ? `${escapeHtml(tf('review.search.empty', state.query))}
+                   ${pendingView ? `<br><button type="button" class="btn ghost sm" data-act="search-all">${escapeHtml(t('review.search.all.status'))}</button>` : ''}`
+                : escapeHtml(t('review.no.items'));
+            listEl.innerHTML = `<div class="queue-empty">${empty}</div>${renderElsewhere()}`;
             return;
         }
-        const pendingView = $('statusFilter').value === 'PENDING_REVIEW';
         listEl.innerHTML = state.items.map(item => {
             const local = item.localEvidenceAvailable && validScore(item.confidence) ? percent(item.confidence) : null;
             const onlineCount = item.onlineCandidateCount || 0;
@@ -700,14 +905,17 @@
             ].join('');
             const meta = [tf('review.files.count', item.fileCount, item.candidateCount), ago(item.createdAt)].filter(Boolean).join(' · ');
             const busy = state.busy[item.id] ? '<span class="spinner q-busy" aria-hidden="true"></span>' : '';
+            const why = reasonView(item);
             return `<button type="button" class="q-item ${item.id === state.currentId ? 'active' : ''}" role="option"
                     aria-selected="${item.id === state.currentId}" data-open="${escapeHtml(item.id)}">
+                <span class="q-tags"><span class="rtag tone-${why.tone}">${escapeHtml(why.tag)}</span>${isNew(item) ? `<span class="q-new">${escapeHtml(t('review.badge.new'))}</span>` : ''}</span>
                 <span class="q-name"><span>${escapeHtml(item.folderName || '')}</span>${busy}</span>
+                ${why.short ? `<span class="q-reason" title="${escapeHtml(why.short)}">${escapeHtml(why.short)}</span>` : ''}
+                ${item.matchedFile ? `<span class="q-match">${escapeHtml(t('review.search.matched.file'))} <b>${escapeHtml(item.matchedFile)}</b></span>` : ''}
                 <span class="q-meta">${pendingView ? '' : statusBadge(item.status) + ' '}${escapeHtml(meta)}</span>
-                ${item.reason ? `<span class="q-reason" title="${escapeHtml(item.reason)}">${escapeHtml(item.reason)}</span>` : ''}
                 ${signals ? `<span class="signals">${signals}</span>` : ''}
             </button>`;
-        }).join('');
+        }).join('') + renderElsewhere();
     }
 
     function markActive() {
@@ -735,12 +943,13 @@
         state.item = null;
         state.selection = null;
         $('desk').dataset.view = 'queue';
+        syncHash();
         renderBlank();
     }
 
     function renderBlank() {
         const pendingView = $('statusFilter').value === 'PENDING_REVIEW';
-        const cleared = pendingView && state.items.length === 0;
+        const cleared = pendingView && state.all.length === 0 && !state.query;
         $('detail').innerHTML = `${renderFlash()}<div class="detail-blank">
             ${ICON.inbox}
             <div class="big">${escapeHtml(cleared ? t('review.queue.clear.title') : t('review.select.folder'))}</div>
@@ -754,6 +963,7 @@
         const switching = id !== state.currentId;
         state.currentId = id;
         state.menuOpen = false;
+        syncHash();
         markActive();
         $('desk').dataset.view = 'detail';
         const card = $('detailCard');
@@ -846,7 +1056,7 @@
             <button class="btn plain sm d-back" data-act="back">${ICON.back}<span>${escapeHtml(t('review.back.queue'))}</span></button>
             <div class="d-title"><h2>${escapeHtml(item.folderName || '')}</h2>${statusBadge(item.status)}</div>
             <div class="d-path">${escapeHtml(item.folderPath || '')}</div>
-            ${item.reason ? `<p class="d-reason">${escapeHtml(item.reason)}</p>` : ''}
+            ${renderWhy(item)}
             <dl class="d-facts">${facts.map(([k, v]) => `<div><dt>${escapeHtml(t(k))}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl>
             ${renderFlash()}
             ${renderAlert(item)}
@@ -866,6 +1076,17 @@
             <div style="height: 14px"></div>
         `;
         renderDecision();
+    }
+
+    /** 原因卡片：是什么原因、依据的数字、接下来怎么办。缺曲的明细由下面的缺曲框给出，不重复 */
+    function renderWhy(item) {
+        const why = reasonView(item);
+        return `<section class="why tone-${why.tone}" aria-label="${escapeHtml(t('review.why.title'))}">
+            <div class="why-k"><span class="rtag tone-${why.tone}">${escapeHtml(why.tag)}</span><span>${escapeHtml(t('review.why.title'))}</span></div>
+            <div class="why-title">${escapeHtml(why.title)}</div>
+            ${why.detail ? `<div class="why-detail">${escapeHtml(why.detail)}</div>` : ''}
+            ${why.next && item.status === 'PENDING_REVIEW' ? `<div class="why-next">${escapeHtml(why.next)}</div>` : ''}
+        </section>`;
     }
 
     function renderFlash() {
@@ -1535,11 +1756,13 @@
         refresh: async () => {
             const btn = $('refreshBtn');
             btn.disabled = true;
+            state.recoveryItems = null;
             await loadList();
             if (state.currentId) await openItem(state.currentId, { keepFlash: true });
             btn.disabled = false;
         },
         back: () => { $('desk').dataset.view = 'queue'; window.scrollTo(0, 0); },
+        'search-all': async () => { $('statusFilter').value = 'ALL'; await loadList(); syncSelection(); },
         'dismiss-flash': () => { state.flash = null; state.item ? renderDetail() : renderBlank(); },
         'dismiss-alert': () => { if (state.item) { delete state.alerts[state.item.id]; renderDetail(); } },
         menu: () => { state.menuOpen = !state.menuOpen; renderDecision(); },
@@ -1554,8 +1777,8 @@
     };
 
     document.addEventListener('click', e => {
-        const tab = e.target.closest('#kindTabs .kind-tab');
-        if (tab) return switchKind(tab.dataset.kind);
+        const chip = e.target.closest('#reasonChips .chip');
+        if (chip) return setReason(chip.dataset.reason);
         const open = e.target.closest('[data-open]');
         if (open) return openItem(open.dataset.open);
         const sel = e.target.closest('[data-select]');
@@ -1581,6 +1804,12 @@
     $('rejectSubmit').addEventListener('click', submitReject);
     $('rejectNote').addEventListener('keydown', e => { if (e.key === 'Enter') submitReject(); });
     $('statusFilter').addEventListener('change', () => { state.flash = null; closeDetail(); loadList({ autoOpen: !isNarrow() }); });
+    $('searchInput').addEventListener('input', e => setQuery(e.target.value));
+    $('searchInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); setQuery(e.target.value, { immediate: true }); }
+        else if (e.key === 'Escape' && e.target.value) { e.stopPropagation(); e.target.value = ''; setQuery('', { immediate: true }); }
+    });
+    $('searchClear').addEventListener('click', () => { $('searchInput').value = ''; setQuery('', { immediate: true }); $('searchInput').focus(); });
 
     document.querySelectorAll('.overlay').forEach(el => {
         el.addEventListener('mousedown', e => { if (e.target === el) cancelOverlay(el.id); });
@@ -1606,7 +1835,8 @@
             if (again) again.focus();
             return;
         }
-        if (e.key === 'j' || e.key === 'J') { e.preventDefault(); moveSelection(1); }
+        if (e.key === '/') { e.preventDefault(); $('searchInput').focus(); $('searchInput').select(); }
+        else if (e.key === 'j' || e.key === 'J') { e.preventDefault(); moveSelection(1); }
         else if (e.key === 'k' || e.key === 'K') { e.preventDefault(); moveSelection(-1); }
     });
 

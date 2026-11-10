@@ -70,6 +70,14 @@ public class ReviewItem {
     /** 进入待确认的原因（用于面板展示） */
     private String reason;
 
+    /**
+     * 结构化原因（见 {@link ReviewDiagnosis}）。面板用它打标签、筛选并渲染本地化文案；
+     * 旧条目为 null，按 {@link ReviewDiagnosis#effectiveCode} 推断。
+     */
+    private String reasonCode;
+    /** 判定时的具体数字（覆盖率、对不上的曲目数等），与 reasonCode 配套 */
+    private java.util.Map<String, Object> reasonFacts = new java.util.LinkedHashMap<>();
+
     /** 条目类型；null 视为 ALBUM_UNRESOLVED（兼容旧队列文件） */
     private Kind kind;
 

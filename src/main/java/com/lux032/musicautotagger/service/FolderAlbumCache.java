@@ -3,6 +3,7 @@ package com.lux032.musicautotagger.service;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import com.lux032.musicautotagger.model.MusicMetadata;
+import com.lux032.musicautotagger.model.ReviewDiagnosis;
 import com.lux032.musicautotagger.util.AudioFileOrdering;
 
 import java.io.File;
@@ -79,6 +80,9 @@ public class FolderAlbumCache {
 
     /** 文件夹 -> 最后一次分析时看到的候选专辑快照（用于人工确认面板） */
     private final Map<String, List<FolderCandidate>> folderCandidates = new ConcurrentHashMap<>();
+
+    /** 文件夹 -> 最近一次「不锁定」判定的诊断（入队待确认时作为结构化原因落盘） */
+    private final Map<String, ReviewDiagnosis> folderDiagnoses = new ConcurrentHashMap<>();
     
     // 依赖服务
     private final DurationSequenceService durationSequenceService;
@@ -543,7 +547,7 @@ public class FolderAlbumCache {
         }
 
         // 否则使用原有的投票方法（保留以备兼容）
-        return analyzeSamplesWithVoting(samples, musicFilesCount, musicFilesCountReliable);
+        return analyzeSamplesWithVoting(folderPath, samples, musicFilesCount, musicFilesCountReliable);
     }
     
     /**
@@ -639,6 +643,13 @@ public class FolderAlbumCache {
             log.warn("  处理：不会强行归入任何一张旧专辑，改为按「专辑未确定」处理");
             log.warn("========================================");
             LogCollector.addLog("WARN", "检测到可能是 MusicBrainz 未收录的专辑（精选集），已避免错误归入旧专辑");
+            recordDiagnosis(folderPath, ReviewDiagnosis.of(ReviewDiagnosis.NO_DOMINANT_ALBUM)
+                .with("coverage", maxCoverage)
+                .with("threshold", MIN_CANDIDATE_COVERAGE)
+                .with("bestCount", bestCount)
+                .with("samples", samplesWithCandidates)
+                .with("albumCount", coverageCount.size())
+                .with("bestTitle", bestRgId != null ? titleOf.get(bestRgId) : null));
             markFolderUnresolved(folderPath);
             return true;
         }
@@ -899,10 +910,18 @@ public class FolderAlbumCache {
             // 对不上的太多：投票选出的专辑根本不是这个文件夹，不锁定，按专辑未确定处理
             log.warn("投票结果「{}」与本地曲目严重不符（最接近的版本仍有 {}/{} 首对不上），不锁定",
                 album.getAlbumTitle(), closestUnmatched, folderDurations.size());
+            recordDiagnosis(folderPath, ReviewDiagnosis.of(ReviewDiagnosis.VOTE_MISMATCH)
+                .with("albumTitle", album.getAlbumTitle())
+                .with("unmatched", closestUnmatched)
+                .with("total", folderDurations.size()));
             return null;
         }
         if (!musicFilesCountReliable) {
             log.info("覆盖检查未通过，但曲目数输入不可靠，不锁定也不判缺曲: {}", album.getAlbumTitle());
+            recordDiagnosis(folderPath, ReviewDiagnosis.of(ReviewDiagnosis.TRACK_COUNT_UNRELIABLE)
+                .with("albumTitle", album.getAlbumTitle())
+                .with("unmatched", closestUnmatched)
+                .with("total", folderDurations.size()));
             return null;
         }
         MissingTracksInfo info = new MissingTracksInfo(
@@ -921,6 +940,19 @@ public class FolderAlbumCache {
      * 进入人工确认队列时需要把「当时看到的候选」一并落盘，
      * 否则重启后面板上会只剩一个文件夹路径，人无从选起。
      */
+    void recordDiagnosis(String folderPath, ReviewDiagnosis diagnosis) {
+        if (folderPath != null && !folderPath.isEmpty() && diagnosis != null) {
+            folderDiagnoses.put(folderPath, diagnosis);
+        }
+    }
+
+    /**
+     * 最近一次「不锁定」判定的诊断；从未记录过时返回 null（调用方按兜底原因处理）。
+     */
+    public ReviewDiagnosis getFolderDiagnosis(String folderPath) {
+        return folderPath == null ? null : folderDiagnoses.get(folderPath);
+    }
+
     public void recordFolderCandidates(String folderPath, List<FolderCandidate> candidates) {
         if (folderPath == null || candidates == null || candidates.isEmpty()) {
             return;
@@ -973,7 +1005,7 @@ public class FolderAlbumCache {
 
             if (folderDurations == null || folderDurations.isEmpty()) {
                 log.warn("无法提取文件夹时长序列,回退到投票方法");
-                return analyzeSamplesWithVoting(samples, musicFilesCount, musicFilesCountReliable);
+                return analyzeSamplesWithVoting(folderPath, samples, musicFilesCount, musicFilesCountReliable);
             }
 
             // 2. 收集所有候选专辑的 ReleaseGroupId（关键改进：包含 AcoustID 返回的所有候选）
@@ -1004,7 +1036,7 @@ public class FolderAlbumCache {
 
             if (allCandidateReleaseGroups.isEmpty()) {
                 log.warn("没有有效的候选 ReleaseGroupId,回退到投票方法");
-                return analyzeSamplesWithVoting(samples, musicFilesCount, musicFilesCountReliable);
+                return analyzeSamplesWithVoting(folderPath, samples, musicFilesCount, musicFilesCountReliable);
             }
 
             // 2.3 获取文件夹名称用于相似度匹配
@@ -1077,7 +1109,7 @@ public class FolderAlbumCache {
 
             if (candidates.isEmpty()) {
                 log.warn("没有获取到任何候选专辑的时长序列,回退到投票方法");
-                return analyzeSamplesWithVoting(samples, musicFilesCount, musicFilesCountReliable);
+                return analyzeSamplesWithVoting(folderPath, samples, musicFilesCount, musicFilesCountReliable);
             }
 
             log.info("成功获取 {} 个候选专辑的时长序列", candidates.size());
@@ -1094,7 +1126,7 @@ public class FolderAlbumCache {
                     return null;
                 }
                 log.warn("所有候选版本都无法覆盖本地曲目，回退到投票方法");
-                return analyzeSamplesWithVoting(samples, musicFilesCount, musicFilesCountReliable);
+                return analyzeSamplesWithVoting(folderPath, samples, musicFilesCount, musicFilesCountReliable);
             }
 
             // 4. 使用时长序列服务选择最佳匹配（同时考虑文件夹名称相似度）
@@ -1123,12 +1155,12 @@ public class FolderAlbumCache {
                 );
             } else {
                 log.warn("时长序列匹配未找到合适专辑,回退到投票方法");
-                return analyzeSamplesWithVoting(samples, musicFilesCount, musicFilesCountReliable);
+                return analyzeSamplesWithVoting(folderPath, samples, musicFilesCount, musicFilesCountReliable);
             }
 
         } catch (Exception e) {
             log.error("时长序列匹配过程出错,回退到投票方法", e);
-            return analyzeSamplesWithVoting(samples, musicFilesCount, musicFilesCountReliable);
+            return analyzeSamplesWithVoting(folderPath, samples, musicFilesCount, musicFilesCountReliable);
         }
     }
     
@@ -1425,11 +1457,11 @@ public class FolderAlbumCache {
      * 使用原有投票方法分析样本（保留用于兼容）
      */
     private CachedAlbumInfo analyzeSamplesWithVoting(List<AlbumIdentificationInfo> samples, int musicFilesCount) {
-        return analyzeSamplesWithVoting(samples, musicFilesCount, true);
+        return analyzeSamplesWithVoting(null, samples, musicFilesCount, true);
     }
 
-    private CachedAlbumInfo analyzeSamplesWithVoting(List<AlbumIdentificationInfo> samples, int musicFilesCount,
-                                                      boolean musicFilesCountReliable) {
+    private CachedAlbumInfo analyzeSamplesWithVoting(String folderPath, List<AlbumIdentificationInfo> samples,
+                                                      int musicFilesCount, boolean musicFilesCountReliable) {
         log.info("使用投票方法分析样本");
 
         // 文件数不可靠时禁用大型专辑的曲目数加权，只按多样本一致性投票。
@@ -1448,6 +1480,8 @@ public class FolderAlbumCache {
 
         if (validSamples.isEmpty()) {
             log.warn("没有任何包含有效专辑信息的样本（共 {} 个样本），保持「专辑未确定」", samples.size());
+            recordDiagnosis(folderPath, ReviewDiagnosis.of(ReviewDiagnosis.NO_ALBUM_INFO)
+                .with("samples", samples.size()));
             return null;
         }
 
@@ -1521,6 +1555,12 @@ public class FolderAlbumCache {
             } else {
                 log.warn("置信度不足，不缓存专辑信息 (需要 >= {}%)",
                     String.format("%.1f", CONFIDENCE_THRESHOLD * 100));
+                recordDiagnosis(folderPath, ReviewDiagnosis.of(ReviewDiagnosis.LOW_CONFIDENCE)
+                    .with("confidence", confidence)
+                    .with("threshold", CONFIDENCE_THRESHOLD)
+                    .with("votes", maxVotes)
+                    .with("samples", samples.size())
+                    .with("bestTitle", bestVote.getAlbumInfo().getAlbumTitle()));
             }
         }
         
@@ -1578,6 +1618,7 @@ public class FolderAlbumCache {
         failureHandoffFolders.remove(folderPath);
         cacheTrackCountMismatches.remove(folderPath);
         folderCandidates.remove(folderPath);
+        folderDiagnoses.remove(folderPath);
         folderMissingTracks.remove(folderPath);
         log.info("已清除文件夹专辑缓存: {}", folderPath);
     }

@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import com.lux032.musicautotagger.config.MusicConfig;
 import com.lux032.musicautotagger.model.MusicMetadata;
+import com.lux032.musicautotagger.model.ReviewDiagnosis;
 import com.lux032.musicautotagger.model.ReviewItem;
 import lombok.extern.slf4j.Slf4j;
 
@@ -96,6 +97,52 @@ public class ReviewQueueService {
         return result;
     }
 
+    /**
+     * 条目是否命中搜索词（不区分大小写的子串匹配）。
+     *
+     * 用户手里通常只有一个文件名或歌名，而队列是按文件夹组织的，
+     * 所以除了文件夹名 / 路径，还要匹配条目里的文件名、指纹曲名、艺术家和合成专辑名。
+     *
+     * @return null 表示未命中；空串表示文件夹本身命中；
+     *         其余为命中的文件名（面板用它告诉用户「是这个文件夹里的哪个文件」）
+     */
+    public static String matchQuery(ReviewItem item, String query) {
+        if (item == null) {
+            return null;
+        }
+        String q = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
+        if (q.isEmpty()) {
+            return "";
+        }
+        if (containsIgnoreCase(item.getFolderName(), q) || containsIgnoreCase(item.getFolderPath(), q)
+            || containsIgnoreCase(item.getSynthesizedAlbumTitle(), q)
+            || containsIgnoreCase(item.getSynthesizedAlbumArtist(), q)) {
+            return "";
+        }
+        if (item.getFiles() != null) {
+            for (ReviewItem.FileEntry file : item.getFiles()) {
+                if (file == null) continue;
+                MusicMetadata md = file.getMetadata();
+                if (containsIgnoreCase(file.getFileName(), q)
+                    || (md != null && (containsIgnoreCase(md.getTitle(), q) || containsIgnoreCase(md.getArtist(), q)))) {
+                    String name = file.getFileName();
+                    if (name == null || name.isEmpty()) {
+                        name = file.getOriginalPath() == null ? "" : new File(file.getOriginalPath()).getName();
+                    }
+                    String title = md == null ? null : md.getTitle();
+                    // 文件名本身没命中时带上曲名，否则用户看不出为什么匹配到这个文件
+                    return !containsIgnoreCase(name, q) && title != null && !title.isBlank()
+                        ? name + " · " + title : name;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean containsIgnoreCase(String text, String lowerQuery) {
+        return text != null && text.toLowerCase(java.util.Locale.ROOT).contains(lowerQuery);
+    }
+
     public synchronized ReviewItem get(String id) {
         return id == null ? null : items.get(id);
     }
@@ -126,6 +173,7 @@ public class ReviewQueueService {
             item.setFolderName(new File(folderPath).getName());
             item.setStatus(ReviewItem.Status.PENDING_REVIEW);
             item.setReason("联网辅助识别");
+            item.setReasonCode(ReviewDiagnosis.ONLINE_ASSIST);
             items.put(item.getId(), item);
         } else if (!recoveryOwned) {
             String reason = existing.getReason();
@@ -311,8 +359,32 @@ public class ReviewQueueService {
                                            List<Integer> durationSequence,
                                            String reason,
                                            double confidence) {
+        return enqueue(folderPath, pendingFiles, synthesized, candidates, durationSequence,
+            reason, confidence, null);
+    }
+
+    /**
+     * @param diagnosis 判定点记录的结构化原因；为 null 时按「专辑未能确定」兜底
+     */
+    public synchronized ReviewItem enqueue(String folderPath,
+                                           List<FolderAlbumCache.PendingFile> pendingFiles,
+                                           FolderAlbumCache.CachedAlbumInfo synthesized,
+                                           List<FolderAlbumCache.FolderCandidate> candidates,
+                                           List<Integer> durationSequence,
+                                           String reason,
+                                           double confidence,
+                                           ReviewDiagnosis diagnosis) {
         return enqueueInternal(folderPath, pendingFiles, synthesized, candidates, durationSequence,
-            reason, confidence, item -> item.setKind(ReviewItem.Kind.ALBUM_UNRESOLVED));
+            reason, confidence, item -> {
+                item.setKind(ReviewItem.Kind.ALBUM_UNRESOLVED);
+                applyDiagnosis(item, diagnosis != null
+                    ? diagnosis : ReviewDiagnosis.of(ReviewDiagnosis.ALBUM_UNDETERMINED));
+            });
+    }
+
+    private static void applyDiagnosis(ReviewItem item, ReviewDiagnosis diagnosis) {
+        item.setReasonCode(diagnosis.getCode());
+        item.setReasonFacts(diagnosis.getFacts());
     }
 
     /** 缺曲条目入队后的回调（用于自动联网搜索），在队列锁外异步执行更安全 */
@@ -350,6 +422,8 @@ public class ReviewQueueService {
 
     private void applyMissingTracks(ReviewItem item, FolderAlbumCache.MissingTracksInfo missing) {
         item.setKind(ReviewItem.Kind.TRACKS_MISSING);
+        // 具体数字在 missingTracks 里，面板直接读，不在 facts 里重复一份
+        applyDiagnosis(item, ReviewDiagnosis.of(ReviewDiagnosis.TRACKS_MISSING));
         ReviewItem.MissingTracks detail = new ReviewItem.MissingTracks();
         detail.setReleaseGroupId(missing.getReleaseGroupId());
         detail.setReleaseId(missing.getReleaseId());

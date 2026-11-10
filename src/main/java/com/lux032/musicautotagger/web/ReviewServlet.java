@@ -2,6 +2,7 @@ package com.lux032.musicautotagger.web;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.lux032.musicautotagger.model.ReviewDiagnosis;
 import com.lux032.musicautotagger.model.ReviewItem;
 import com.lux032.musicautotagger.service.CoverCandidateService;
 import com.lux032.musicautotagger.service.RecoveryService;
@@ -84,6 +85,8 @@ public class ReviewServlet extends HttpServlet {
                         "pendingAlbum", reviewQueue.countPending(ReviewItem.Kind.ALBUM_UNRESOLVED),
                         "pendingMissingTracks", reviewQueue.countPending(ReviewItem.Kind.TRACKS_MISSING),
                         "rejected", reviewQueue.countRejected(),
+                        // 概览页直接列出最新的几条并带上原因，点一下就落在那一条上
+                        "latest", latestPending(LATEST_PENDING_LIMIT),
                         "total", reviewQueue.list(null).size(),
                         // 面板靠这个开关决定要不要显示「待确认」入口：
                         // 关闭且队列为空时隐藏，但队列里还有遗留条目就必须继续显示，否则那些条目无法处置
@@ -267,9 +270,21 @@ public class ReviewServlet extends HttpServlet {
             }
         }
 
+        // q：按文件夹名 / 路径 / 文件名 / 曲名 / 艺术家搜索。
+        // 用户往往只知道「某个文件没被处理」，而队列按文件夹组织，必须能从文件反查到条目。
+        String query = req.getParameter("q");
+        boolean searching = query != null && !query.trim().isEmpty();
         List<Map<String, Object>> summaries = new ArrayList<>();
         for (ReviewItem item : reviewQueue.list(filter)) {
-            summaries.add(toSummary(item));
+            String hit = ReviewQueueService.matchQuery(item, query);
+            if (hit == null) {
+                continue;
+            }
+            Map<String, Object> summary = toSummary(item);
+            if (searching && !hit.isEmpty()) {
+                summary.put("matchedFile", hit);
+            }
+            summaries.add(summary);
         }
         respond(resp, 200, Map.of("items", summaries, "pending", reviewQueue.countPending()));
     }
@@ -295,6 +310,24 @@ public class ReviewServlet extends HttpServlet {
 
     // ==================== 视图 ====================
 
+    private static final int LATEST_PENDING_LIMIT = 2;
+
+    private List<Map<String, Object>> latestPending(int limit) {
+        List<Map<String, Object>> latest = new ArrayList<>();
+        for (ReviewItem item : reviewQueue.list(ReviewItem.Status.PENDING_REVIEW)) {
+            if (latest.size() >= limit) {
+                break;
+            }
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id", item.getId());
+            map.put("folderName", item.getFolderName());
+            map.put("reasonCode", ReviewDiagnosis.effectiveCode(item));
+            map.put("createdAt", item.getCreatedAt());
+            latest.add(map);
+        }
+        return latest;
+    }
+
     private Map<String, Object> toSummary(ReviewItem item) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", item.getId());
@@ -304,6 +337,8 @@ public class ReviewServlet extends HttpServlet {
         map.put("kind", item.effectiveKind().name());
         map.put("missingTracks", item.getMissingTracks());
         map.put("reason", item.getReason());
+        map.put("reasonCode", ReviewDiagnosis.effectiveCode(item));
+        map.put("reasonFacts", item.getReasonFacts() == null ? Map.of() : item.getReasonFacts());
         map.put("confidence", item.getConfidence());
         boolean localEvidenceAvailable = (item.getCandidates() != null && !item.getCandidates().isEmpty())
             || item.getSynthesizedAlbumTitle() != null || item.getSynthesizedAlbumArtist() != null;

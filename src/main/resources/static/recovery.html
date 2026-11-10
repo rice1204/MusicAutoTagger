@@ -25,6 +25,12 @@
             transition: .15s;
         }
         .tab:hover { color: var(--text); }
+        .list-tools { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+        .find-input {
+            flex: 1 1 180px; max-width: 280px; min-width: 0; border: 1px solid var(--border-strong); border-radius: 8px;
+            padding: 6px 10px; min-height: 34px; font: inherit; font-size: 13px; color: var(--text); background: #fff;
+        }
+        .find-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
         .tab.active { background: #fff; color: var(--text); box-shadow: var(--shadow-sm); }
 
         .notice {
@@ -134,10 +140,14 @@
     </div>
 
     <section class="card" style="margin-bottom: 18px;">
+        <div class="list-tools">
         <div class="tabs">
             <button class="tab active" id="partialTab" onclick="setTab('PARTIAL')" data-i18n="recovery.tab.partial">部分识别</button>
             <button class="tab" id="failedTab" onclick="setTab('FAILED')" data-i18n="recovery.tab.failed">识别失败</button>
             <button class="tab" id="trashTab" onclick="setTab('TRASH')" data-i18n="recovery.tab.trash">回收站</button>
+        </div>
+            <input id="findInput" class="find-input" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="按名称筛选" data-i18n-placeholder="recovery.search.placeholder" aria-label="按名称筛选">
         </div>
         <div class="notice">
             <div data-i18n="recovery.notice.1">「部分识别」与「识别失败」通常是互斥状态：完整写入部分识别目录后不再重复生成失败副本；处理异常、目标撞名或 LLM 自动归档时仍保留失败副本供复核。</div>
@@ -235,7 +245,21 @@
         const r = await fetch('/api/auth/status'), d = await r.json();
         if (!d.authenticated) { location.href = '/index.html'; return; }
         csrfToken = d.csrfToken;
-        loadAll();
+        // 待确认页搜索时会带着 #find=<词> 跳过来：预填筛选词，并切到有匹配的那个 Tab
+        const find = (new URLSearchParams(location.hash.replace(/^#/, '')).get('find') || '').trim();
+        if (find) {
+            findQuery = find.toLowerCase();
+            document.getElementById('findInput').value = find;
+        }
+        document.getElementById('findInput').addEventListener('input', e => {
+            findQuery = e.target.value.trim().toLowerCase();
+            if (currentTab === 'TRASH') renderTrash(); else render();
+        });
+        await loadAll();
+        if (find && !matchesFind(items.filter(i => i.sourceType === currentTab)).length) {
+            const other = matchesFind(items)[0];
+            if (other) setTab(other.sourceType);
+        }
         setInterval(loadJobs, 3000);
     }
 
@@ -271,8 +295,13 @@
 
     function renderTrash() {
         const el = document.getElementById('list');
-        if (!trashItems.length) { el.innerHTML = `<div class="empty">${esc(T('recovery.trash.empty'))}</div>`; return; }
-        el.innerHTML = trashItems.map(i => `
+        const list = matchesFind(trashItems);
+        if (!list.length) {
+            el.innerHTML = `<div class="empty">${esc(trashItems.length && findQuery
+                ? TF('recovery.search.empty', document.getElementById('findInput').value.trim()) : T('recovery.trash.empty'))}</div>`;
+            return;
+        }
+        el.innerHTML = list.map(i => `
             <div class="item">
                 <div>
                     <div class="name">${esc(i.relativePath || i.id)}</div>
@@ -334,11 +363,23 @@
         } catch (e) { /* 轮询失败静默重试 */ }
     }
 
+    let findQuery = '';
+    function matchesFind(list) {
+        if (!findQuery) return list;
+        return list.filter(i => [i.name, i.relativePath, i.originalName, i.path]
+            .some(v => String(v || '').toLowerCase().includes(findQuery)));
+    }
+
     function render() {
         if (currentTab === 'TRASH') { renderTrash(); return; }
-        const list = items.filter(i => i.sourceType === currentTab);
+        const inTab = items.filter(i => i.sourceType === currentTab);
+        const list = matchesFind(inTab);
         const el = document.getElementById('list');
-        if (!list.length) { el.innerHTML = `<div class="empty">${esc(T('recovery.empty'))}</div>`; return; }
+        if (!list.length) {
+            el.innerHTML = `<div class="empty">${esc(inTab.length && findQuery
+                ? TF('recovery.search.empty', document.getElementById('findInput').value.trim()) : T('recovery.empty'))}</div>`;
+            return;
+        }
         el.innerHTML = list.map(i => `
             <div class="item ${i.sourceType === 'FAILED' ? 'failed' : ''}">
                 <div>

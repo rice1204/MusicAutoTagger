@@ -121,6 +121,8 @@
         .attn-text { min-width: 0; flex: 1; }
         .attn-title { display: block; font-weight: 600; font-size: 13px; }
         .attn-desc { display: block; font-size: 12px; color: var(--text-mute); }
+        .attn-item .attn-text { min-width: 0; }
+        .attn-item .attn-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .attn-count {
             font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px;
             background: var(--bg-soft); color: var(--text-mute); font-variant-numeric: tabular-nums;
@@ -1250,6 +1252,7 @@
 
         // 概览右侧「等你处理」：待确认两类积压 + 重新识别入口
         const ICON_INBOX = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"></path><path d="M3 13h5l1 3h6l1-3h5"></path></svg>';
+        const ICON_ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg>';
         const ICON_REDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>';
 
         function attentionRow(href, icon, title, desc, count, bad) {
@@ -1279,10 +1282,19 @@
             if (!list) return;
             list.innerHTML = '';
             if (stats) {
-                list.appendChild(attentionRow('review.html#album', ICON_INBOX, t('review.tab.album'),
+                list.appendChild(attentionRow('review.html', ICON_INBOX, t('review.tab.album'),
                     t('dash.attention.album.desc'), stats.pendingAlbum));
                 list.appendChild(attentionRow('review.html#missing', ICON_INBOX, t('review.tab.missing'),
                     t('dash.attention.missing.desc'), stats.pendingMissingTracks));
+                // 最新入队的条目直达：文件夹名 + 没能自动处理的原因，不用进去再翻列表
+                (stats.latest || []).forEach(item => {
+                    const reason = t('review.reason.' + item.reasonCode + '.label');
+                    const row = attentionRow('review.html#item=' + encodeURIComponent(item.id), ICON_ARROW,
+                        item.folderName || '', t('dash.attention.latest') + ' · ' + reason, null);
+                    row.classList.add('attn-item');
+                    row.title = item.folderName || '';
+                    list.appendChild(row);
+                });
             }
             const rc = recoveryStats;
             list.appendChild(attentionRow('recovery.html', ICON_REDO, t('web.recovery'),

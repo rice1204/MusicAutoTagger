@@ -410,7 +410,8 @@ public class AlbumBatchProcessor {
                     folderAlbumCache.getFolderCandidates(folderPath),
                     folderAlbumCache.getFolderDurationSequence(folderPath),
                     "专辑无法在 MusicBrainz 中确定（候选覆盖率不足 / 时长序列不匹配）",
-                    unified
+                    unified,
+                    folderAlbumCache.getFolderDiagnosis(folderPath)
                 );
 
                 if (queued != null) {
