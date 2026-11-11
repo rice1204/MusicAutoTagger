@@ -43,6 +43,15 @@ public class CoverArtCache {
         
         log.info(I18nUtil.getMessage("cache.cover.service.initialized"));
     }
+
+    /**
+     * 确保缓存目录存在，若因瞬时故障创建失败则重试。
+     * 构造函数仅会调用一次，但目录可能在服务运行期间因外部原因消失，
+     * 因此每次实际写入缓存文件前也会调用本方法进行兜底检查。
+     */
+    private void ensureCacheDirectoryExists() throws java.io.IOException {
+        com.lux032.musicautotagger.util.DirectoryUtils.ensureExists(new File(cacheDirectory));
+    }
     
     /**
      * 根据 Release Group ID 获取缓存的封面
@@ -152,8 +161,13 @@ public class CoverArtCache {
             // 生成缓存文件路径: cacheDir/urlHash.jpg
             String cacheFileName = urlHash + ".jpg";
             Path cacheFilePath = Paths.get(cacheDirectory, cacheFileName);
-            
-            // 保存文件
+
+            // 保存文件前确保缓存目录存在（带重试）。
+            // 原实现仅在构造函数中创建一次缓存目录；若该目录后续因外部原因缺失
+            // （例如被误删，或底层网络存储一次性瞬时故障导致未创建成功），
+            // 之后所有的 Files.write 都会因 NoSuchFileException 永久失败。
+            ensureCacheDirectoryExists();
+
             Files.write(cacheFilePath, coverData);
             log.info(I18nUtil.getMessage("cache.cover.cached.to.file"), cacheFilePath);
             

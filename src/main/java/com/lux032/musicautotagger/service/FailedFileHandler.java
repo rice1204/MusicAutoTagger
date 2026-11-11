@@ -123,10 +123,8 @@ public class FailedFileHandler {
                 targetFile = withFlacExtension(targetFile);
             }
             
-            // 创建目标目录
-            if (!targetFile.getParentFile().exists()) {
-                targetFile.getParentFile().mkdirs();
-            }
+            // 创建目标目录（带重试，防止网络存储瞬时故障导致静默失败）
+            com.lux032.musicautotagger.util.DirectoryUtils.ensureExists(targetFile.getParentFile());
             
             // 目标路径已有内容时无法证明它就是本次源文件的有效副本。
             // 不能仅凭同名就吞掉 FAILED 入口，否则历史撞名/旧半成品会被误判为成功存储。
@@ -538,7 +536,7 @@ public class FailedFileHandler {
                     + "/" + partialFile.getName());
                 return null;
             }
-            albumDir.mkdirs();
+            com.lux032.musicautotagger.util.DirectoryUtils.ensureExists(albumDir);
 
             // 移动文件（不覆盖）
             try (var libraryWrite = LibraryWriteGuard.acquire()) {

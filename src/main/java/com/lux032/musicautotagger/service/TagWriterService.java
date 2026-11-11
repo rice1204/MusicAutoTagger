@@ -140,11 +140,8 @@ public class TagWriterService {
                 // 1. 确定目标文件路径
                 targetFile = determineTargetFile(sourceFile, metadata);
 
-                // 2. 创建目标目录
-                if (!targetFile.getParentFile().exists()) {
-                    targetFile.getParentFile().mkdirs();
-                    ensureWritablePermissions(targetFile.getParentFile().toPath(), true);
-                }
+                // 2. 创建目标目录（带重试，防止网络存储瞬时故障导致静默失败）
+                ensureDirectoryExists(targetFile.getParentFile());
 
                 // 3. 复制文件（目标已存在且不是同一首歌时不覆盖，改名另存）
                 targetFile = copyWithoutClobbering(sourceFile, targetFile);
@@ -283,7 +280,7 @@ public class TagWriterService {
      * 按照"专辑艺术家/专辑"的目录结构组织文件
      * 使用专辑艺术家(Album Artist)而不是单曲艺术家,避免多艺术家专辑分层混乱
      */
-    private File determineTargetFile(File sourceFile, MusicMetadata metadata) {
+    private File determineTargetFile(File sourceFile, MusicMetadata metadata) throws IOException {
         String fileName = sourceFile.getName();
         String extension = "";
         int dotIndex = fileName.lastIndexOf('.');
@@ -346,14 +343,10 @@ public class TagWriterService {
             log.warn("目标路径: {} (无艺术家信息)", newFileName);
         }
 
-        // 确保目标目录存在
+        // 确保目标目录存在（带重试，防止网络存储瞬时故障导致静默失败）
         File targetFile = targetPath.toFile();
         File parentDir = targetFile.getParentFile();
-        if (!parentDir.exists()) {
-            log.info("创建目录: {}", parentDir.getAbsolutePath());
-            parentDir.mkdirs();
-            ensureWritablePermissions(parentDir.toPath(), true);
-        }
+        ensureDirectoryExists(parentDir);
 
         return targetFile;
     }
@@ -881,6 +874,20 @@ public class TagWriterService {
      */
     private String sanitizeFileName(String fileName) {
         return FileNameSanitizer.sanitize(fileName);
+    }
+
+    /**
+     * 确保目标目录存在（带重试，防止网络存储瞬时故障导致静默失败）。
+     *
+     * @see com.lux032.musicautotagger.util.DirectoryUtils#ensureExists(File)
+     */
+    private void ensureDirectoryExists(File dir) throws IOException {
+        com.lux032.musicautotagger.util.DirectoryUtils.ensureExists(dir);
+        try {
+            ensureWritablePermissions(dir.toPath(), true);
+        } catch (Exception permissionError) {
+            log.debug("创建目录后设置权限失败（忽略）: {}", dir.getAbsolutePath(), permissionError);
+        }
     }
 
     private void ensureWritablePermissions(Path path, boolean isDirectory) {
